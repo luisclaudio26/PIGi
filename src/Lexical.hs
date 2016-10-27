@@ -132,7 +132,7 @@ lexident = locate $
 -- | Parses a token based on the given table
 lextable :: [(String, LexToken)] -> LexParser
 lextable [] = fail "tabled"
-lextable ((s, token):ts) = lextoken token s <|> lextable ts
+lextable ((s, token):ts) = try(lextoken token s) <|> lextable ts
 
 -- | Parses a reserved word
 lexreserved :: LexParser
