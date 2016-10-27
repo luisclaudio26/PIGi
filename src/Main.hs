@@ -21,7 +21,8 @@ runlexparser filename input =
 run :: [String] -> IO ()
 run ["-l", filename] = readFile filename >>= runlexparser filename >> return ()
 run ["-l"] = getContents >>= runlexparser "(stdin)" >> return ()
+run [] = error "Interpreter not implemented yet"
 
 main :: IO ()
-main = do print "PIG language interpreter"
+main = do putStrLn "<< PIG language interpreter >>"
           getArgs >>= run 
