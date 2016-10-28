@@ -18,7 +18,7 @@ runsynparser filename input =
 
 printlextokens :: [PosLexToken] -> IO ()
 printlextokens tokens = 
-    mapM_ (print . snd) tokens
+    mapM_ (print . ignorepos) tokens
 
 runlexparser :: String -> String -> IO [PosLexToken]
 runlexparser filename input =
