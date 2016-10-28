@@ -53,7 +53,7 @@ data LexToken = LexLParen         -- (
               | LexIdent String   -- identifier
               | LexLitInt Int     -- int literal
               | LexLitFloat Float -- float literal
-              deriving (Show)
+              deriving (Show, Eq)
 
 -- | Map between keywords and lexical tokens
 keywordTable :: [(String, LexToken)]
