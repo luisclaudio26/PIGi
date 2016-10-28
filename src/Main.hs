@@ -4,11 +4,11 @@ import System.Environment
 import Text.Parsec (parse)
 import Lexical
 
-printlextokens :: [PosToken] -> IO ()
+printlextokens :: [PosLexToken] -> IO ()
 printlextokens tokens = 
     mapM_ (print . snd) tokens
 
-runlexparser :: String -> String -> IO ([PosToken])
+runlexparser :: String -> String -> IO ([PosLexToken])
 runlexparser filename input =
     let result = parse lexparser filename input
     in case result of

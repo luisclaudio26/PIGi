@@ -108,10 +108,10 @@ keywords :: [String]
 keywords = map fst keywordTable
 
 -- | A lexical token combined with its source code position
-type PosToken = (SourcePos, LexToken)
+type PosLexToken = Located LexToken
 
 -- | A parser for a lexical token.
-type LexParser = Parsec String () PosToken
+type LexParser = Parsec String () PosLexToken
 
 -- | Parses token by corresponding string.
 lextoken :: LexToken -> String -> LexParser
@@ -162,7 +162,7 @@ lexunit = do
     return tk
 
 -- | PIG full lexical parser
-lexparser :: Parsec String () [PosToken]
+lexparser :: Parsec String () [PosLexToken]
 lexparser = do
     spaces
     tks <- many lexunit
