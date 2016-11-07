@@ -1,4 +1,4 @@
-module Lexical where
+  module Lexical where
 
 import Text.Parsec
 import Text.Parsec.Char
@@ -63,9 +63,11 @@ keywordTable = [("and", LexAnd)
                ,("xor", LexXor)
                ,("def", LexDef)
                ,("func", LexFunc)
+               ,("proc", LexProc) 
                ,("struct", LexStruct)
                ,("if", LexIf)
                ,("else", LexElse)
+               ,("while", LexWhile)
                ,("in", LexIn)
                ]
 
