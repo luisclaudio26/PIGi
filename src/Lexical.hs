@@ -46,9 +46,11 @@ data LexToken = LexLParen         -- ^ @(@ token
               | LexXor            -- ^ @xor@ token
               | LexDef            -- ^ @def@ token
               | LexFunc           -- ^ @func@ token
+              | LexProc           -- ^ @proc@ token
               | LexStruct         -- ^ @struct@ token
               | LexIf             -- ^ @if@ token
               | LexElse           -- ^ @else@ token
+              | LexWhile          -- ^ @while@ token
               | LexIn             -- ^ @in@ token
               | LexIdent String   -- ^ identifier
               | LexLitInt Int     -- ^ @int@ literal
