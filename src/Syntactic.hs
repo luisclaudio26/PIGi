@@ -52,6 +52,18 @@ synlitint = syntoken $
             (LexLitInt i) -> Just (SynLitInt i)
             _ -> Nothing
 
+-- | Syntactic construct for definition
+data SynDef = SynDef (Located SynIdent) (Located SynIdent) deriving (Show)
+
+--| SynParser for definition of variable
+syndef :: SynParser SynDef
+syndef = locate $ 
+  do synlex LexDef
+     var <- synident
+     synlex LexColon
+     vartype <- synident  
+     synlex LexSemicolon
+     return (SynDef var vartype)
 
 data SynExpr = SynVal (Located SynIdent)
              | SynPlus (Located SynExpr) (Located SynExpr)
