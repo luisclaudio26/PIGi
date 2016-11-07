@@ -63,6 +63,49 @@ syndef = locate $
      synlex LexSemicolon
      return (SynDef var vartype)
 
+data SynBlock = SynBlock --ListExpressions
+
+synblock :: SynParser SynBlock
+synblock = 
+  do synlex LexLBraces
+  -- expressions
+  synlex LexrBraces
+  return (SynBlock)
+
+data SynIf = SynIf (Located SynIdent) (Located SynBlock) deriving (Show)
+data SynElse = SynElse (Located SynIdent) (Located SynBlock) deriving (Show)
+data SynElseIf = SynElseIf (Located SynIdent) (Located SynIdent) (Located SynBlock) deriving (Show)
+
+synif :: SynParser SynIf
+synif = locate $
+  do synlex LexIf
+  expr <- synident -- change to expression
+  content <- synblock
+  return (SynIf )
+
+synelse :: SynParser SynElse
+synelse = locate $
+  do synlex LexElse
+  content <- synblock
+  return (SynElse )
+
+synelseif :: SynParser SynElseIf
+synelseif = locate $
+  do synlex LexElse
+  synlex LexIf
+  expr <- synident -- change to expression
+  content <- synblock
+  return (SynElseIf )
+
+data SynWhile = SynWhile (Located SynIdent) (Located SynBlock) deriving (Show)
+
+synwhile :: SynParser SynWhile
+synwhile = located $
+  do synlex LexWhile
+  expr <- synident -- change to expression
+  content <- synblock
+  return (SynWhile )
+
 -- !! EVERYTHING BELOW THIS LINE IS WRONG !!
 
 -- | Syntactic construct for module

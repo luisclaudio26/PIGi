@@ -1,4 +1,4 @@
-module Lexical where
+  module Lexical where
 
 import Text.Parsec
 import Text.Parsec.Char
@@ -46,9 +46,11 @@ data LexToken = LexLParen         -- (
               | LexXor            -- xor
               | LexDef            -- def
               | LexFunc           -- func
+              | LexProc           -- proc
               | LexStruct         -- struct
               | LexIf             -- if
               | LexElse           -- else
+              | LexWhile          -- while
               | LexIn             -- in
               | LexIdent String   -- identifier
               | LexLitInt Int     -- int literal
@@ -63,9 +65,11 @@ keywordTable = [("and", LexAnd)
                ,("xor", LexXor)
                ,("def", LexDef)
                ,("func", LexFunc)
+               ,("proc", LexProc) 
                ,("struct", LexStruct)
                ,("if", LexIf)
                ,("else", LexElse)
+               ,("while", LexWhile)
                ,("in", LexIn)
                ]
 
