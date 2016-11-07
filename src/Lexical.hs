@@ -6,53 +6,53 @@ import qualified Text.ParserCombinators.Parsec.Number as Number
 import PosParsec
 
 -- | Lexical token type
-data LexToken = LexLParen         -- (
-              | LexRParen         -- )
-              | LexLBracket       -- [
-              | LexRBracket       -- ]
-              | LexLBraces        -- {
-              | LexRBraces        -- }
-              | LexColon          -- :
-              | LexSemicolon      -- ;
-              | LexComma          -- ,
-              | LexArrow          -- ->
-              | LexParallel       -- //
-              | LexRange          -- ..
-              | LexAttr           -- =
-              | LexPlusAttr       -- +=
-              | LexMinusAttr      -- -=
-              | LexTimesAttr      -- *=
-              | LexDivAttr        -- /=
-              | LexPlus           -- +
-              | LexMinus          -- -
-              | LexTimes          -- *
-              | LexDiv            -- /
-              | LexDot            -- .
-              | LexBitAnd         -- &
-              | LexBitOr          -- |
-              | LexBitNot         -- !
-              | LexBitXor         -- ~
-              | LexLShift         -- <<
-              | LexRShift         -- >>
-              | LexEQ             -- ==
-              | LexNEQ            -- =/=
-              | LexLT             -- <
-              | LexLE             -- <=
-              | LexGT             -- >
-              | LexGE             -- >=
-              | LexAnd            -- and
-              | LexOr             -- or
-              | LexNot            -- not
-              | LexXor            -- xor
-              | LexDef            -- def
-              | LexFunc           -- func
-              | LexStruct         -- struct
-              | LexIf             -- if
-              | LexElse           -- else
-              | LexIn             -- in
-              | LexIdent String   -- identifier
-              | LexLitInt Int     -- int literal
-              | LexLitFloat Float -- float literal
+data LexToken = LexLParen         -- ^ @(@ token
+              | LexRParen         -- ^ @)@ token
+              | LexLBracket       -- ^ @[@ token
+              | LexRBracket       -- ^ @]@ token
+              | LexLBraces        -- ^ @{@ token
+              | LexRBraces        -- ^ @}@ token
+              | LexColon          -- ^ @:@ token
+              | LexSemicolon      -- ^ @;@ token
+              | LexComma          -- ^ @,@ token
+              | LexArrow          -- ^ @->@ token
+              | LexParallel       -- ^ @//@ token
+              | LexRange          -- ^ @..@ token
+              | LexAttr           -- ^ @=@ token
+              | LexPlusAttr       -- ^ @+=@ token
+              | LexMinusAttr      -- ^ @-=@ token
+              | LexTimesAttr      -- ^ @*=@ token
+              | LexDivAttr        -- ^ @/=@ token
+              | LexPlus           -- ^ @+@ token
+              | LexMinus          -- ^ @-@ token
+              | LexTimes          -- ^ @*@ token
+              | LexDiv            -- ^ @/@ token
+              | LexDot            -- ^ @.@ token
+              | LexBitAnd         -- ^ @&@ token
+              | LexBitOr          -- ^ @|@ token
+              | LexBitNot         -- ^ @!@ token
+              | LexBitXor         -- ^ @~@ token
+              | LexLShift         -- ^ @<<@ token
+              | LexRShift         -- ^ @>>@ token
+              | LexEQ             -- ^ @==@ token
+              | LexNEQ            -- ^ @=/=@ token
+              | LexLT             -- ^ @<@ token
+              | LexLE             -- ^ @<=@ token
+              | LexGT             -- ^ @>@ token
+              | LexGE             -- ^ @>=@ token
+              | LexAnd            -- ^ @and@ token
+              | LexOr             -- ^ @or@ token
+              | LexNot            -- ^ @not@ token
+              | LexXor            -- ^ @xor@ token
+              | LexDef            -- ^ @def@ token
+              | LexFunc           -- ^ @func@ token
+              | LexStruct         -- ^ @struct@ token
+              | LexIf             -- ^ @if@ token
+              | LexElse           -- ^ @else@ token
+              | LexIn             -- ^ @in@ token
+              | LexIdent String   -- ^ identifier
+              | LexLitInt Int     -- ^ @int@ literal
+              | LexLitFloat Float -- ^ @float@ literal
               deriving (Show, Eq)
 
 -- | Map between keywords and lexical tokens
