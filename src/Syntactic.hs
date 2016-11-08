@@ -134,20 +134,21 @@ synattr = locate $
      return (SynAttr var value)
 
 -- = Definition and attribution
--- | Syntactic construct for simple definition & attribution
-data SynDefAttr = SynDefAttr (Located SynIdent) (Located SynIdent) (Located SynExpr) deriving (Show)
+-- | Syntactic construct for definition & attribution
+data SynDefAttr = SynDefAttr [SynTypedIdent] [Located SynExpr] deriving (Show)
 
--- | SynParser for simple definition & attribution
+-- | SynParser for definition & attribution
 syndefattr :: SynParser SynDefAttr
 syndefattr = locate $
   do synlex LexDef
-     var <- synident
+     var <- fmap getidentlist synidentlist
      synlex LexColon
      vartype <- synident
      synlex LexAttr
-     value <- synexpr
+     value <- fmap getexprlist synexprlist
      synlex LexSemicolon
-     return (SynDefAttr var vartype value)
+     let f t i = SynTypedIdent i t  
+     return $ SynDefAttr (fmap (f vartype) var) value
 
 -- | Syntactic construct for block
 data SynBlock = SynBlock [Located SynStmt] deriving (Show)
@@ -228,10 +229,6 @@ synfor = locate $
      synlex LexIn
      range <- synexpr
      return (SynFor i range)
-
--- = Procedure
---data SynArgs = SynArgs (Lo)
---data SynProc = SynProc (Located SynExpr) (Located SynBlock) deriving (Show)
 
 -- | Syntactic construct for expression list
 data SynExprList = SynExprList { getexprlist :: [Located SynExpr] }
@@ -455,11 +452,11 @@ synexpr = buildExpressionParser synoptable synexprUnit
 -- !! EVERYTHING BELOW THIS LINE IS WRONG !!
 
 -- | Syntactic construct for module
-data SynModule = SynModule [Located SynDef] deriving (Show)
+data SynModule = SynModule [Located SynDefAttr] deriving (Show)
 
 -- | SynParser for whole module
 synmodule :: SynParser SynModule
 synmodule = locate $
-    do ids <- many syndef
+    do ids <- many syndefattr
        eof
        return (SynModule ids)
