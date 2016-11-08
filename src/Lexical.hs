@@ -27,7 +27,11 @@ data LexToken = LexLParen         -- ^ @(@ token
               | LexMinus          -- ^ @-@ token
               | LexTimes          -- ^ @*@ token
               | LexDiv            -- ^ @/@ token
+              | LexDotTimes       -- ^ @.*.@ token
+              | LexDotDiv         -- ^ @./.@ token
+              | LexMod            -- ^ @mod@ token
               | LexDot            -- ^ @.@ token
+              | LexExp            -- ^ @^@ token
               | LexBitAnd         -- ^ @&@ token
               | LexBitOr          -- ^ @|@ token
               | LexBitNot         -- ^ @!@ token
@@ -55,6 +59,7 @@ data LexToken = LexLParen         -- ^ @(@ token
               | LexIdent String   -- ^ identifier
               | LexLitInt Int     -- ^ @int@ literal
               | LexLitFloat Float -- ^ @float@ literal
+              | LexLitBool Bool   -- ^ @bool@ literal
               deriving (Show, Eq)
 
 -- | Map between keywords and lexical tokens
@@ -63,6 +68,7 @@ keywordTable = [("and", LexAnd)
                ,("or", LexOr)
                ,("not", LexNot)
                ,("xor", LexXor)
+               ,("mod", LexMod)
                ,("def", LexDef)
                ,("func", LexFunc)
                ,("proc", LexProc) 
@@ -71,6 +77,8 @@ keywordTable = [("and", LexAnd)
                ,("else", LexElse)
                ,("while", LexWhile)
                ,("in", LexIn)
+               ,("true", LexLitBool True)
+               ,("false", LexLitBool False)
                ]
 
 -- | Map between symbols and lexical tokens
@@ -87,8 +95,10 @@ symbolTable = [("(", LexLParen)
               ,("=/=", LexNEQ)
               ,("==", LexEQ)
               ,("=", LexAttr)
+              ,("<<", LexLShift)
               ,("<=", LexLE)
               ,("<", LexLT)
+              ,(">>", LexRShift)
               ,(">=", LexGE)
               ,(">", LexGT)
               ,("//", LexParallel)
@@ -103,9 +113,13 @@ symbolTable = [("(", LexLParen)
               ,("/", LexDiv)
               ,("&", LexBitAnd)
               ,("|", LexBitOr)
-              ,("~", LexBitNot)
+              ,("~", LexBitXor)
+              ,("!", LexBitNot)
               ,("..", LexRange)
-              ,(".", LexDot)]
+              ,(".*.", LexDotTimes)
+              ,("./.", LexDotDiv)
+              ,(".", LexDot)
+              ,("^", LexExp)]
 
 -- | Lists all keywords.
 keywords :: [String]
