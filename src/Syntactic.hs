@@ -122,12 +122,17 @@ syndefattr = locate $
      synlex LexSemicolon
      return (SynDefAttr var vartype value)
 
-data SynStmt = SynStmtDef (Located SynDef) deriving (Show) 
+-- | Statement syntactic construct
+data SynStmt = SynStmtDef (Located SynDef)
+             | SynStmtAttr (Located SynAttr)
+
+instance Show SynStmt where
+    show (SynStmtDef  x) = show x ++ "\n"
+    show (SynStmtAttr x) = show x ++ "\n"
 
 synstmt :: SynParser SynStmt
-synstmt = locate $
-  do def <- syndef
-     return (SynStmtDef def)
+synstmt = locate $ fmap SynStmtDef syndef 
+                  <|> fmap SynStmtAttr synattr
 
 data SynBlock = SynBlock [Located SynStmt] deriving (Show)
 
@@ -394,11 +399,11 @@ synexpr = buildExpressionParser synoptable synexprUnit
 -- !! EVERYTHING BELOW THIS LINE IS WRONG !!
 
 -- | Syntactic construct for module
-data SynModule = SynModule [Located SynAttr] deriving (Show)
+data SynModule = SynModule [Located SynStmt] deriving (Show)
 
 -- | SynParser for whole module
 synmodule :: SynParser SynModule
 synmodule = locate $
-    do ids <- many synattr
+    do ids <- many synstmt
        eof
        return (SynModule ids)
