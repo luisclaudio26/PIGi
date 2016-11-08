@@ -59,6 +59,7 @@ data LexToken = LexLParen         -- ^ @(@ token
               | LexIdent String   -- ^ identifier
               | LexLitInt Int     -- ^ @int@ literal
               | LexLitFloat Float -- ^ @float@ literal
+              | LexLitBool Bool   -- ^ @bool@ literal
               deriving (Show, Eq)
 
 -- | Map between keywords and lexical tokens
@@ -76,6 +77,8 @@ keywordTable = [("and", LexAnd)
                ,("else", LexElse)
                ,("while", LexWhile)
                ,("in", LexIn)
+               ,("true", LexLitBool True)
+               ,("false", LexLitBool False)
                ]
 
 -- | Map between symbols and lexical tokens

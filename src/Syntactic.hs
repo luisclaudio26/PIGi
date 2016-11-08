@@ -72,6 +72,19 @@ synlitfloat = syntoken $
             (LexLitFloat f) -> Just (SynLitFloat f)
             _ -> Nothing
 
+-- | Syntactic construct for boolean literal
+data SynLitBool = SynLitBool { getbool :: Bool }
+
+instance Show SynLitBool where
+    show = show . getbool
+
+-- | SynParser for boolean literal
+synlitbool :: SynParser SynLitBool
+synlitbool = syntoken $
+    \t -> case t of
+            (LexLitBool b) -> Just (SynLitBool b)
+            _ -> Nothing
+
 -- | Syntactic construct for definition
 data SynDef = SynDef (Located SynIdent) (Located SynIdent) deriving (Show)
 
@@ -164,6 +177,7 @@ synwhile = locate $
 data SynExpr = SynIdentExpr (Located SynIdent)
              | SynLitIntExpr (Located SynLitInt)
              | SynLitFloatExpr (Located SynLitFloat)
+             | SynLitBoolExpr (Located SynLitBool)
              | SynPar      LocSynExpr
              | SynExp      LocSynExpr LocSynExpr
              | SynNeg      LocSynExpr
@@ -232,6 +246,7 @@ instance Show SynExpr where
     show (SynIdentExpr id) = show id
     show (SynLitIntExpr lit) = show lit
     show (SynLitFloatExpr lit) = show lit
+    show (SynLitBoolExpr lit) = show lit
 
 type LocSynExpr = Located SynExpr
 
@@ -253,6 +268,12 @@ synexprLitFloat = locate $
     do lit <- synlitfloat
        return $ SynLitFloatExpr lit
 
+-- | Bool literal expression syntactic parser
+synexprLitBool :: SynParser SynExpr
+synexprLitBool = locate $
+    do lit <- synlitbool
+       return $ SynLitBoolExpr lit 
+
 -- | Parenthesized expression syntactic parser
 synexprPar :: SynParser SynExpr
 synexprPar = locate $
@@ -265,6 +286,7 @@ synexprPar = locate $
 synexprUnit :: SynParser SynExpr
 synexprUnit = synexprPar <|> synexprLitInt
                          <|> synexprLitFloat
+                         <|> synexprLitBool
                          <|> synexprIdent
 
 -- | Binary operator syntactic parser
