@@ -145,7 +145,8 @@ synwhile = locate $
 
 
 -- | Syntactic construct for expressions
-data SynExpr = SynVal (Located SynIdent)
+data SynExpr = SynIdentExpr (Located SynIdent)
+             | SynLitIntExpr (Located SynLitInt)
              | SynPar      LocSynExpr
              | SynExp      LocSynExpr LocSynExpr
              | SynNeg      LocSynExpr
@@ -211,15 +212,22 @@ instance Show SynExpr where
     show (SynAnd x y)      = parenBin " and " x y
     show (SynXor x y)      = parenBin " xor " x y
     show (SynOr x y)       = parenBin " or " x y
-    show (SynVal id)       = show id
+    show (SynIdentExpr id) = show id
+    show (SynLitIntExpr lit) = show lit
 
 type LocSynExpr = Located SynExpr
 
--- | Value expression syntactic parser
-synexprVal :: SynParser SynExpr
-synexprVal = locate $
-    do val <- synident
-       return $ SynVal val
+-- | Identifier expression syntactic parser
+synexprIdent :: SynParser SynExpr
+synexprIdent = locate $
+    do id <- synident
+       return $ SynIdentExpr id
+
+-- | Integer literal expression syntactic parser
+synexprLitInt :: SynParser SynExpr
+synexprLitInt = locate $
+    do lit <- synlitint
+       return $ SynLitIntExpr lit
 
 -- | Parenthesized expression syntactic parser
 synexprPar :: SynParser SynExpr
@@ -231,7 +239,7 @@ synexprPar = locate $
 
 -- | High precedence expression unit parser
 synexprUnit :: SynParser SynExpr
-synexprUnit = synexprPar <|> synexprVal
+synexprUnit = synexprPar <|> synexprLitInt <|> synexprIdent
 
 -- | Binary operator syntactic parser
 synexprBinOp :: LexToken -- ^operator lexical token
