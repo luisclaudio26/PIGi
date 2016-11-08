@@ -215,10 +215,10 @@ data SynFor = SynFor (Located SynIdent) (Located SynExpr) deriving (Show)
 synfor :: SynParser SynFor
 synfor = locate $
   do synlex LexFor
-      i <- synident
-      synlex LexIn
-      range <- synexpr
-      return (SynFor i range)
+     i <- synident
+     synlex LexIn
+     range <- synexpr
+     return (SynFor i range)
 
 -- | Syntactic construct for expression list
 data SynExprList = SynExprList { getexprlist :: [Located SynExpr] }
