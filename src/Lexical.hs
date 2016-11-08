@@ -27,7 +27,11 @@ data LexToken = LexLParen         -- ^ @(@ token
               | LexMinus          -- ^ @-@ token
               | LexTimes          -- ^ @*@ token
               | LexDiv            -- ^ @/@ token
+              | LexDotTimes       -- ^ @.*.@ token
+              | LexDotDiv         -- ^ @./.@ token
+              | LexMod            -- ^ @mod@ token
               | LexDot            -- ^ @.@ token
+              | LexExp            -- ^ @^@ token
               | LexBitAnd         -- ^ @&@ token
               | LexBitOr          -- ^ @|@ token
               | LexBitNot         -- ^ @!@ token
@@ -63,6 +67,7 @@ keywordTable = [("and", LexAnd)
                ,("or", LexOr)
                ,("not", LexNot)
                ,("xor", LexXor)
+               ,("mod", LexMod)
                ,("def", LexDef)
                ,("func", LexFunc)
                ,("proc", LexProc) 
@@ -87,8 +92,10 @@ symbolTable = [("(", LexLParen)
               ,("=/=", LexNEQ)
               ,("==", LexEQ)
               ,("=", LexAttr)
+              ,("<<", LexLShift)
               ,("<=", LexLE)
               ,("<", LexLT)
+              ,(">>", LexRShift)
               ,(">=", LexGE)
               ,(">", LexGT)
               ,("//", LexParallel)
@@ -103,9 +110,13 @@ symbolTable = [("(", LexLParen)
               ,("/", LexDiv)
               ,("&", LexBitAnd)
               ,("|", LexBitOr)
-              ,("~", LexBitNot)
+              ,("~", LexBitXor)
+              ,("!", LexBitNot)
               ,("..", LexRange)
-              ,(".", LexDot)]
+              ,(".*.", LexDotTimes)
+              ,("./.", LexDotDiv)
+              ,(".", LexDot)
+              ,("^", LexExp)]
 
 -- | Lists all keywords.
 keywords :: [String]

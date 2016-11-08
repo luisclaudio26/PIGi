@@ -7,6 +7,7 @@ import Text.Parsec.Expr
 import PosParsec
 import Lexical
 
+type SynSpecParser a = Parsec [PosLexToken] () a
 type SynParser a = Parsec [PosLexToken] () (Located a)
 
 -- | Create a SynParser from an lexical test function
@@ -32,7 +33,10 @@ synlex lextok = syntoken $
 
 
 -- | Syntactic construct for identifier
-data SynIdent = SynIdent { getlabel :: String } deriving (Show)
+data SynIdent = SynIdent { getlabel :: String } -- deriving (Show)
+
+instance Show SynIdent where
+    show x = getlabel x
 
 -- | SynParser for identifier
 synident :: SynParser SynIdent
@@ -115,42 +119,164 @@ synwhile = locate $
      content <- synblock
      return (SynWhile expr content)
 
-data SynExpr = SynVal (Located SynIdent)
-             | SynPlus (Located SynExpr) (Located SynExpr)
-             | SynTimes (Located SynExpr) (Located SynExpr)
-             deriving (Show)
 
-synexprval :: SynParser SynExpr
-synexprval = locate $
+-- | Syntactic construct for expressions
+data SynExpr = SynVal (Located SynIdent)
+             | SynExp      LocSynExpr LocSynExpr
+             | SynNeg      LocSynExpr
+             | SynBitNot   LocSynExpr
+             | SynTimes    LocSynExpr LocSynExpr
+             | SynDiv      LocSynExpr LocSynExpr
+             | SynDotTimes LocSynExpr LocSynExpr
+             | SynDotDiv   LocSynExpr LocSynExpr
+             | SynMod      LocSynExpr LocSynExpr
+             | SynDot      LocSynExpr LocSynExpr 
+             | SynPlus     LocSynExpr LocSynExpr
+             | SynMinus    LocSynExpr LocSynExpr
+             | SynRShift   LocSynExpr LocSynExpr
+             | SynLShift   LocSynExpr LocSynExpr
+             | SynEQ       LocSynExpr LocSynExpr
+             | SynNEQ      LocSynExpr LocSynExpr
+             | SynLT       LocSynExpr LocSynExpr
+             | SynLE       LocSynExpr LocSynExpr
+             | SynGT       LocSynExpr LocSynExpr
+             | SynGE       LocSynExpr LocSynExpr
+             | SynBitAnd   LocSynExpr LocSynExpr
+             | SynBitXor   LocSynExpr LocSynExpr
+             | SynBitOr    LocSynExpr LocSynExpr
+             | SynNot      LocSynExpr
+             | SynAnd      LocSynExpr LocSynExpr
+             | SynXor      LocSynExpr LocSynExpr
+             | SynOr       LocSynExpr LocSynExpr
+
+parenBin :: (Show a, Show b) => String -> a -> b -> String
+parenBin op x y = "(" ++ show x ++ op ++ show y ++ ")"
+
+parenUn :: (Show a) => String -> a -> String
+parenUn op x = "(" ++ op ++ show x ++ ")"
+
+instance Show SynExpr where
+    show (SynExp x y)      = parenBin "^" x y
+    show (SynNeg x)        = parenUn "-" x
+    show (SynBitNot x)     = parenUn "!" x
+    show (SynTimes x y)    = parenBin "*" x y
+    show (SynDiv x y)      = parenBin "/" x y
+    show (SynDotTimes x y) = parenBin ".*." x y
+    show (SynDotDiv x y)   = parenBin "./." x y
+    show (SynMod x y)      = parenBin " mod " x y
+    show (SynDot x y)      = parenBin "." x y
+    show (SynPlus x y)     = parenBin "+" x y
+    show (SynMinus x y)    = parenBin "-" x y
+    show (SynRShift x y)   = parenBin ">>" x y
+    show (SynLShift x y)   = parenBin "<<" x y
+    show (SynEQ x y)       = parenBin "==" x y
+    show (SynNEQ x y)      = parenBin "=/=" x y
+    show (SynLT x y)       = parenBin "<" x y
+    show (SynLE x y)       = parenBin "<=" x y
+    show (SynGT x y)       = parenBin ">" x y
+    show (SynGE x y)       = parenBin ">=" x y
+    show (SynBitAnd x y)   = parenBin "&" x y
+    show (SynBitXor x y)   = parenBin "~" x y
+    show (SynBitOr x y)    = parenBin "|" x y
+    show (SynNot x)        = parenUn "not " x
+    show (SynAnd x y)      = parenBin " and " x y
+    show (SynXor x y)      = parenBin " xor " x y
+    show (SynOr x y)       = parenBin " or " x y
+    show (SynVal id)       = show id
+
+type LocSynExpr = Located SynExpr
+
+-- | Value expression syntactic parser
+synexprVal :: SynParser SynExpr
+synexprVal = locate $
     do val <- synident
        return $ SynVal val
 
-synexprop :: LexToken
-          -> (Located SynExpr -> Located SynExpr -> SynExpr)
-          -> Parsec [PosLexToken] () (Located SynExpr
-                                     -> Located SynExpr
-                                     -> Located SynExpr)
-synexprop opToken constr =
+-- | Binary operator syntactic parser
+synexprBinOp :: LexToken -- ^operator lexical token
+             -> (LocSynExpr -> LocSynExpr -> SynExpr) -- ^ binary expression constructor
+             -> Parsec [PosLexToken] () (LocSynExpr
+                                        -> LocSynExpr
+                                        -> LocSynExpr)
+synexprBinOp opToken constr =
     do tok <- synlex opToken
        return $ \e1 e2 -> mklocated (getpos tok) $ constr e1 e2
 
-synoptable :: OperatorTable [PosLexToken] () Identity (Located SynExpr)
-synoptable = [[Infix (synexprop LexPlus SynPlus) AssocLeft],
-              [Infix (synexprop LexTimes SynTimes) AssocLeft]]
+-- | Unary operation syntactic parser
+synexprUnOp :: LexToken -- ^operator lexical token
+            -> (LocSynExpr -> SynExpr) -- ^ unary expression constructor
+            -> SynSpecParser (LocSynExpr -> LocSynExpr)
+synexprUnOp opToken constr =
+    do tok <- synlex opToken
+       return $ \e -> mklocated (getpos tok) $ constr e
 
+
+-- | Builds an binary left associative operator
+opBinL :: LexToken -- ^operator lexical token
+       -> (LocSynExpr -> LocSynExpr -> SynExpr) -- ^ binary expression constructor
+       -> Operator [PosLexToken] () Identity LocSynExpr
+opBinL ltok stok = Infix (synexprBinOp ltok stok) AssocLeft
+
+
+-- | Builds an binary right associative operator
+opBinR :: LexToken -- ^operator lexical token
+       -> (LocSynExpr -> LocSynExpr -> SynExpr) -- ^ binary expression constructor
+       -> Operator [PosLexToken] () Identity LocSynExpr
+opBinR ltok stok = Infix (synexprBinOp ltok stok) AssocRight
+
+
+-- | Builds an unary operator
+opUnL :: LexToken -- ^ operator lexical token
+      -> (Located SynExpr -> SynExpr) -- ^ unary expression constructor
+      -> Operator [PosLexToken] () Identity LocSynExpr
+opUnL ltok stok = Prefix (synexprUnOp ltok stok)
+
+
+-- | Operator table, by precedence order
+synoptable :: OperatorTable [PosLexToken] () Identity LocSynExpr
+synoptable = [ -- highest precedence
+              [ opBinR LexExp SynExp ],
+              [ opUnL LexMinus SynNeg
+              , opUnL LexBitNot SynBitNot ],
+              [ opBinL LexTimes SynTimes
+              , opBinL LexDiv SynDiv
+              , opBinL LexDotTimes SynDotTimes
+              , opBinL LexDotDiv SynDotDiv
+              , opBinL LexMod SynMod ],
+              [ opBinL LexDot SynDot ],
+              [ opBinL LexPlus SynPlus
+              , opBinL LexMinus SynMinus ],
+              [ opBinL LexLShift SynLShift 
+              , opBinL LexRShift SynRShift ],
+              [ opBinL LexEQ SynEQ
+              , opBinL LexNEQ SynNEQ
+              , opBinL LexLT SynLT
+              , opBinL LexLE SynLE
+              , opBinL LexGT SynGT
+              , opBinL LexGE SynGE ],
+              [ opBinL LexBitAnd SynBitAnd ],
+              [ opBinL LexBitXor SynBitXor ],
+              [ opBinL LexBitOr SynBitOr ],
+              [ opUnL LexNot SynNot ],
+              [ opBinL LexAnd SynAnd ],
+              [ opBinL LexXor SynXor ],
+              [ opBinL LexOr SynOr ]
+             ] -- lowest precedence
+
+
+-- | Expression syntactic parser
 synexpr :: SynParser SynExpr
-synexpr = buildExpressionParser synoptable synexprval
-
+synexpr = buildExpressionParser synoptable synexprVal
 
 -- !! EVERYTHING BELOW THIS LINE IS WRONG !!
 
 -- | Syntactic construct for module
-data SynModule = SynModule [Located SynIf] deriving (Show)
+data SynModule = SynModule [Located SynExpr] deriving (Show)
 
 -- | SynParser for whole module
 synmodule :: SynParser SynModule
 synmodule = locate $
-    do ids <- many synif
+    do ids <- many synexpr
        eof
        return (SynModule ids)
 
