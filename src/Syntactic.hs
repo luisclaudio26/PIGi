@@ -45,6 +45,15 @@ synident = syntoken $
             (LexIdent s) -> Just (SynIdent s)
             _ -> Nothing
 
+-- | Syntactic construct for typed identifier
+data SynTypedIdent = SynTypedIdent (Located SynIdent) (Located SynIdent) deriving (Show)
+
+-- | Syntactic construct for identifiers list
+data SynIdentList = SynIdentList { getidentlist :: [Located SynIdent] }
+
+-- | SynParser for list of identifiers
+synidentlist :: SynSpecParser SynIdentList
+synidentlist = fmap SynIdentList $ sepBy synident (synlex LexComma) 
 
 -- | Syntactic construct for integer literal
 data SynLitInt = SynLitInt { getint :: Int } 
@@ -94,19 +103,19 @@ synstmt = locate $
 
 -- = Definitions
 
--- == Simple definition
 -- | Syntactic construct for definition
-data SynDef = SynDef (Located SynIdent) (Located SynIdent) deriving (Show)
+data SynDef = SynDef [SynTypedIdent] deriving (Show)
 
 -- | SynParser for definition of variable
 syndef :: SynParser SynDef
 syndef = locate $ 
   do synlex LexDef
-     var <- synident
+     var <- fmap getidentlist synidentlist
      synlex LexColon
      vartype <- synident  
      synlex LexSemicolon
-     return (SynDef var vartype)
+     let f t i = SynTypedIdent i t  
+     return . SynDef $ fmap (f vartype) var
 
 -- = Attribution
 
@@ -219,6 +228,10 @@ synfor = locate $
      synlex LexIn
      range <- synexpr
      return (SynFor i range)
+
+-- = Procedure
+--data SynArgs = SynArgs (Lo)
+--data SynProc = SynProc (Located SynExpr) (Located SynBlock) deriving (Show)
 
 -- | Syntactic construct for expression list
 data SynExprList = SynExprList { getexprlist :: [Located SynExpr] }
@@ -442,11 +455,11 @@ synexpr = buildExpressionParser synoptable synexprUnit
 -- !! EVERYTHING BELOW THIS LINE IS WRONG !!
 
 -- | Syntactic construct for module
-data SynModule = SynModule [Located SynAttr] deriving (Show)
+data SynModule = SynModule [Located SynDef] deriving (Show)
 
 -- | SynParser for whole module
 synmodule :: SynParser SynModule
 synmodule = locate $
-    do ids <- many synattr
+    do ids <- many syndef
        eof
        return (SynModule ids)
