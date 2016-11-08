@@ -122,6 +122,7 @@ synwhile = locate $
 
 -- | Syntactic construct for expressions
 data SynExpr = SynVal (Located SynIdent)
+             | SynPar      LocSynExpr
              | SynExp      LocSynExpr LocSynExpr
              | SynNeg      LocSynExpr
              | SynBitNot   LocSynExpr
@@ -149,6 +150,9 @@ data SynExpr = SynVal (Located SynIdent)
              | SynXor      LocSynExpr LocSynExpr
              | SynOr       LocSynExpr LocSynExpr
 
+paren :: (Show a) => a -> String
+paren x = "(" ++ show x ++ ")"
+
 parenBin :: (Show a, Show b) => String -> a -> b -> String
 parenBin op x y = "(" ++ show x ++ op ++ show y ++ ")"
 
@@ -156,6 +160,7 @@ parenUn :: (Show a) => String -> a -> String
 parenUn op x = "(" ++ op ++ show x ++ ")"
 
 instance Show SynExpr where
+    show (SynPar x)        = paren x
     show (SynExp x y)      = parenBin "^" x y
     show (SynNeg x)        = parenUn "-" x
     show (SynBitNot x)     = parenUn "!" x
@@ -191,6 +196,18 @@ synexprVal :: SynParser SynExpr
 synexprVal = locate $
     do val <- synident
        return $ SynVal val
+
+-- | Parenthesized expression syntactic parser
+synexprPar :: SynParser SynExpr
+synexprPar = locate $
+    do synlex LexLParen
+       expr <- synexpr
+       synlex LexRParen
+       return $ SynPar expr
+
+-- | High precedence expression unit parser
+synexprUnit :: SynParser SynExpr
+synexprUnit = synexprPar <|> synexprVal
 
 -- | Binary operator syntactic parser
 synexprBinOp :: LexToken -- ^operator lexical token
@@ -266,7 +283,7 @@ synoptable = [ -- highest precedence
 
 -- | Expression syntactic parser
 synexpr :: SynParser SynExpr
-synexpr = buildExpressionParser synoptable synexprVal
+synexpr = buildExpressionParser synoptable synexprUnit
 
 -- !! EVERYTHING BELOW THIS LINE IS WRONG !!
 
