@@ -85,6 +85,16 @@ synlitbool = syntoken $
             (LexLitBool b) -> Just (SynLitBool b)
             _ -> Nothing
 
+data SynStmt = SynStmtDef (Located SynDef) deriving (Show) 
+
+synstmt :: SynParser SynStmt
+synstmt = locate $
+  do def <- syndef
+     return (SynStmtDef def)
+
+-- = Definitions
+
+-- == Simple definition
 -- | Syntactic construct for definition
 data SynDef = SynDef (Located SynIdent) (Located SynIdent) deriving (Show)
 
@@ -98,9 +108,14 @@ syndef = locate $
      synlex LexSemicolon
      return (SynDef var vartype)
 
- 
+-- = Attribution
+
+-- == Simple attribution 
+
+-- | Syntactic construct for attribution 
 data SynAttr = SynAttr (Located SynIdent) (Located SynExpr) deriving (Show)
 
+-- | SynParser for attribution
 synattr :: SynParser SynAttr
 synattr = locate $
   do var <- synident
@@ -109,8 +124,11 @@ synattr = locate $
      synlex LexSemicolon
      return (SynAttr var value)
 
+-- = Definition and attribution
+-- | Syntactic construct for simple definition & attribution
 data SynDefAttr = SynDefAttr (Located SynIdent) (Located SynIdent) (Located SynExpr) deriving (Show)
 
+-- | SynParser for simple definition & attribution
 syndefattr :: SynParser SynDefAttr
 syndefattr = locate $
   do synlex LexDef
@@ -122,15 +140,10 @@ syndefattr = locate $
      synlex LexSemicolon
      return (SynDefAttr var vartype value)
 
-data SynStmt = SynStmtDef (Located SynDef) deriving (Show) 
-
-synstmt :: SynParser SynStmt
-synstmt = locate $
-  do def <- syndef
-     return (SynStmtDef def)
-
+-- | Syntactic construct for block
 data SynBlock = SynBlock [Located SynStmt] deriving (Show)
 
+-- | SynParser for block
 synblock :: SynParser SynBlock
 synblock = locate $
   do synlex LexLBraces
@@ -138,10 +151,16 @@ synblock = locate $
      synlex LexRBraces
      return (SynBlock stmts)
 
-data SynIf = SynIf (Located SynExpr) (Located SynBlock) deriving (Show)
-data SynElse = SynElse (Located SynBlock) deriving (Show)
-data SynElseIf = SynElseIf (Located SynExpr) (Located SynBlock) deriving (Show)
+-- = Conditional structures:
 
+-- == If / ifelse / else
+
+-- === if
+
+-- | Syntactic construct for if
+data SynIf = SynIf (Located SynExpr) (Located SynBlock) deriving (Show)
+
+-- | SynParser for if
 synif :: SynParser SynIf
 synif = locate $
   do synlex LexIf
@@ -149,12 +168,12 @@ synif = locate $
      content <- synblock
      return (SynIf expr content)
 
-synelse :: SynParser SynElse
-synelse = locate $
-  do synlex LexElse
-     content <- synblock
-     return (SynElse content)
+-- === if else
 
+-- | Syntactic construct for else id
+data SynElseIf = SynElseIf (Located SynExpr) (Located SynBlock) deriving (Show)
+
+-- | SynParser for else if
 synelseif :: SynParser SynElseIf
 synelseif = locate $
   do synlex LexElse
@@ -163,14 +182,43 @@ synelseif = locate $
      content <- synblock
      return (SynElseIf expr content)
 
+-- === else
+
+-- | Syntactic construct for 'else'
+data SynElse = SynElse (Located SynBlock) deriving (Show)
+
+-- | SynParser for 'else'
+synelse :: SynParser SynElse
+synelse = locate $
+  do synlex LexElse
+     content <- synblock
+     return (SynElse content)
+
+-- == while
+
+-- | Syntactic construct for 'while'
 data SynWhile = SynWhile (Located SynExpr) (Located SynBlock) deriving (Show)
 
+-- | SynParser for while
 synwhile :: SynParser SynWhile
 synwhile = locate $
   do synlex LexWhile
      expr <- synexpr
      content <- synblock
      return (SynWhile expr content)
+
+-- == for
+-- | Syntactic construct for 'for'
+data SynFor = SynFor (Located SynIdent) (Located SynExpr) deriving (Show)
+
+-- | SynParser for 'for'
+synfor :: SynParser SynFor
+synfor = locate $
+  do synlex LexFor
+      i <- synident
+      synlex LexIn
+      range <- synexpr
+      return (SynFor i range)
 
 -- | Syntactic construct for expression list
 data SynExprList = SynExprList { getexprlist :: [Located SynExpr] }
