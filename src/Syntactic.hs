@@ -177,4 +177,3 @@ synmodule = locate $
     do ids <- many synattr
        eof
        return (SynModule ids)
-
