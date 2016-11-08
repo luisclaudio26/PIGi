@@ -47,13 +47,29 @@ synident = syntoken $
 
 
 -- | Syntactic construct for integer literal
-data SynLitInt = SynLitInt { getint :: Int } deriving (Show)
+data SynLitInt = SynLitInt { getint :: Int } 
+
+instance Show SynLitInt where
+    show = show . getint
 
 -- | SynParser for integer literal
 synlitint :: SynParser SynLitInt
 synlitint = syntoken $
     \t -> case t of
             (LexLitInt i) -> Just (SynLitInt i)
+            _ -> Nothing
+
+-- | Syntactic construct for float literal
+data SynLitFloat = SynLitFloat { getfloat :: Float }
+
+instance Show SynLitFloat where
+    show = show . getfloat
+
+-- | SynParser for float literal
+synlitfloat :: SynParser SynLitFloat
+synlitfloat = syntoken $
+    \t -> case t of
+            (LexLitFloat f) -> Just (SynLitFloat f)
             _ -> Nothing
 
 -- | Syntactic construct for definition
@@ -147,6 +163,7 @@ synwhile = locate $
 -- | Syntactic construct for expressions
 data SynExpr = SynIdentExpr (Located SynIdent)
              | SynLitIntExpr (Located SynLitInt)
+             | SynLitFloatExpr (Located SynLitFloat)
              | SynPar      LocSynExpr
              | SynExp      LocSynExpr LocSynExpr
              | SynNeg      LocSynExpr
@@ -214,6 +231,7 @@ instance Show SynExpr where
     show (SynOr x y)       = parenBin " or " x y
     show (SynIdentExpr id) = show id
     show (SynLitIntExpr lit) = show lit
+    show (SynLitFloatExpr lit) = show lit
 
 type LocSynExpr = Located SynExpr
 
@@ -229,6 +247,12 @@ synexprLitInt = locate $
     do lit <- synlitint
        return $ SynLitIntExpr lit
 
+-- | Float literal expression syntactic parser
+synexprLitFloat :: SynParser SynExpr
+synexprLitFloat = locate $
+    do lit <- synlitfloat
+       return $ SynLitFloatExpr lit
+
 -- | Parenthesized expression syntactic parser
 synexprPar :: SynParser SynExpr
 synexprPar = locate $
@@ -239,7 +263,9 @@ synexprPar = locate $
 
 -- | High precedence expression unit parser
 synexprUnit :: SynParser SynExpr
-synexprUnit = synexprPar <|> synexprLitInt <|> synexprIdent
+synexprUnit = synexprPar <|> synexprLitInt
+                         <|> synexprLitFloat
+                         <|> synexprIdent
 
 -- | Binary operator syntactic parser
 synexprBinOp :: LexToken -- ^operator lexical token
