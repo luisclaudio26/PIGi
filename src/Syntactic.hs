@@ -1,7 +1,7 @@
 module Syntactic where
 
 import Control.Monad.Identity
-import Text.Parsec (eof)
+import Text.Parsec (eof, sepBy)
 import Text.Parsec.Prim
 import Text.Parsec.Expr
 import PosParsec
@@ -172,12 +172,38 @@ synwhile = locate $
      content <- synblock
      return (SynWhile expr content)
 
+-- | Syntactic construct for expression list
+data SynExprList = SynExprList { getexprlist :: [Located SynExpr] }
+
+instance Show SynExprList where
+    show = show . getexprlist
+
+-- | SynParser for list of expressions (not located)
+synexprlist :: SynSpecParser SynExprList
+synexprlist = fmap SynExprList $ sepBy synexpr (synlex LexComma) 
+
+-- | Syntactic construct for function/procedure call
+data SynCall = SynCall { getfuncid :: Located SynIdent
+                       , getarglist :: SynExprList }
+
+instance Show SynCall where
+    show (SynCall id list) = show id ++ "(" ++ show list ++ ")"
+
+-- | SynParser for function/procedure call
+syncall :: SynParser SynCall
+syncall = locate $
+    do fid <- synident
+       synlex LexLParen
+       exprs <- synexprlist
+       synlex LexRParen
+       return $ SynCall fid exprs
 
 -- | Syntactic construct for expressions
 data SynExpr = SynIdentExpr (Located SynIdent)
              | SynLitIntExpr (Located SynLitInt)
              | SynLitFloatExpr (Located SynLitFloat)
              | SynLitBoolExpr (Located SynLitBool)
+             | SynCallExpr (Located SynCall)
              | SynPar      LocSynExpr
              | SynExp      LocSynExpr LocSynExpr
              | SynNeg      LocSynExpr
@@ -247,6 +273,7 @@ instance Show SynExpr where
     show (SynLitIntExpr lit) = show lit
     show (SynLitFloatExpr lit) = show lit
     show (SynLitBoolExpr lit) = show lit
+    show (SynCallExpr call) = show call
 
 type LocSynExpr = Located SynExpr
 
@@ -258,21 +285,15 @@ synexprIdent = locate $
 
 -- | Integer literal expression syntactic parser
 synexprLitInt :: SynParser SynExpr
-synexprLitInt = locate $
-    do lit <- synlitint
-       return $ SynLitIntExpr lit
+synexprLitInt = locate $ fmap SynLitIntExpr synlitint
 
 -- | Float literal expression syntactic parser
 synexprLitFloat :: SynParser SynExpr
-synexprLitFloat = locate $
-    do lit <- synlitfloat
-       return $ SynLitFloatExpr lit
+synexprLitFloat = locate $ fmap SynLitFloatExpr synlitfloat
 
 -- | Bool literal expression syntactic parser
 synexprLitBool :: SynParser SynExpr
-synexprLitBool = locate $
-    do lit <- synlitbool
-       return $ SynLitBoolExpr lit 
+synexprLitBool = locate $ fmap SynLitBoolExpr synlitbool
 
 -- | Parenthesized expression syntactic parser
 synexprPar :: SynParser SynExpr
@@ -282,11 +303,16 @@ synexprPar = locate $
        synlex LexRParen
        return $ SynPar expr
 
+-- | Function call expression syntactic parser
+synexprCall :: SynParser SynExpr
+synexprCall = locate $ fmap SynCallExpr syncall
+
 -- | High precedence expression unit parser
 synexprUnit :: SynParser SynExpr
 synexprUnit = synexprPar <|> synexprLitInt
                          <|> synexprLitFloat
                          <|> synexprLitBool
+                         <|> try synexprCall
                          <|> synexprIdent
 
 -- | Binary operator syntactic parser
