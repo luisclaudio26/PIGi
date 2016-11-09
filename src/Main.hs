@@ -5,6 +5,7 @@ import Text.Parsec (parse)
 import PosParsec
 import Lexical
 import Syntactic
+import Interpreter
 
 runsynparser :: String -> String -> IO (Located SynModule)
 runsynparser filename input =
