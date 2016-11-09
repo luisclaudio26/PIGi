@@ -122,14 +122,14 @@ syndef = locate $
 -- == Simple attribution 
 
 -- | Syntactic construct for attribution 
-data SynAttr = SynAttr (Located SynIdent) (Located SynExpr) deriving (Show)
+data SynAttr = SynAttr [Located SynIdent] [Located SynExpr] deriving (Show)
 
 -- | SynParser for attribution
 synattr :: SynParser SynAttr
 synattr = locate $
-  do var <- synident
+  do var <- fmap getidentlist synidentlist
      synlex LexAttr -- <|> synlex LexPlusAttr <|> synlex LexMinusAttr <|> synlex LexTimesAttr <|> synlex LexDivAttr
-     value <- synexpr
+     value <- fmap getexprlist synexprlist
      synlex LexSemicolon
      return (SynAttr var value)
 
@@ -452,11 +452,11 @@ synexpr = buildExpressionParser synoptable synexprUnit
 -- !! EVERYTHING BELOW THIS LINE IS WRONG !!
 
 -- | Syntactic construct for module
-data SynModule = SynModule [Located SynDefAttr] deriving (Show)
+data SynModule = SynModule [Located SynAttr] deriving (Show)
 
 -- | SynParser for whole module
 synmodule :: SynParser SynModule
 synmodule = locate $
-    do ids <- many syndefattr
+    do ids <- many synattr
        eof
        return (SynModule ids)
