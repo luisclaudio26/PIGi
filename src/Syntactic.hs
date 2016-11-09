@@ -284,9 +284,7 @@ type LocSynExpr = Located SynExpr
 
 -- | Identifier expression syntactic parser
 synexprIdent :: SynParser SynExpr
-synexprIdent = locate $
-    do id <- synident
-       return $ SynIdentExpr id
+synexprIdent = locate $ fmap SynIdentExpr synident
 
 -- | Integer literal expression syntactic parser
 synexprLitInt :: SynParser SynExpr
