@@ -55,6 +55,7 @@ data LexToken = LexLParen         -- ^ @(@ token
               | LexIf             -- ^ @if@ token
               | LexElse           -- ^ @else@ token
               | LexWhile          -- ^ @while@ token
+              | LexFor            -- ^ @for@ token
               | LexIn             -- ^ @in@ token
               | LexIdent String   -- ^ identifier
               | LexLitInt Int     -- ^ @int@ literal
@@ -76,6 +77,7 @@ keywordTable = [("and", LexAnd)
                ,("if", LexIf)
                ,("else", LexElse)
                ,("while", LexWhile)
+               ,("for", LexFor)
                ,("in", LexIn)
                ,("true", LexLitBool True)
                ,("false", LexLitBool False)
