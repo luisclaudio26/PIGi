@@ -31,7 +31,6 @@ synlex :: LexToken -> SynParser SynToken
 synlex lextok = syntoken $
     \t -> if t == lextok then Just (SynToken t) else Nothing
 
-
 -- | Syntactic construct for identifier
 data SynIdent = SynIdent { getlabel :: String } -- deriving (Show)
 
@@ -99,7 +98,7 @@ data SynStmt = SynStmtDef (Located SynDef) deriving (Show)
 synstmt :: SynParser SynStmt
 synstmt = locate $
   do def <- syndef
-     return (SynStmtDef def)
+     return $ SynStmtDef def
 
 -- = Definitions
 
@@ -131,7 +130,7 @@ synattr = locate $
      synlex LexAttr -- <|> synlex LexPlusAttr <|> synlex LexMinusAttr <|> synlex LexTimesAttr <|> synlex LexDivAttr
      value <- fmap getexprlist synexprlist
      synlex LexSemicolon
-     return (SynAttr var value)
+     return $ SynAttr var value
 
 -- = Definition and attribution
 -- | Syntactic construct for definition & attribution
@@ -159,7 +158,7 @@ synblock = locate $
   do synlex LexLBraces
      stmts <- many synstmt
      synlex LexRBraces
-     return (SynBlock stmts)
+     return $ SynBlock stmts
 
 -- = Conditional structures:
 
@@ -176,7 +175,7 @@ synif = locate $
   do synlex LexIf
      expr <- synexpr
      content <- synblock
-     return (SynIf expr content)
+     return $ SynIf expr content
 
 -- === if else
 
@@ -190,7 +189,7 @@ synelseif = locate $
      synlex LexIf
      expr <- synexpr
      content <- synblock
-     return (SynElseIf expr content)
+     return $ SynElseIf expr content
 
 -- === else
 
@@ -202,7 +201,7 @@ synelse :: SynParser SynElse
 synelse = locate $
   do synlex LexElse
      content <- synblock
-     return (SynElse content)
+     return $ SynElse content
 
 -- == while
 
@@ -215,7 +214,7 @@ synwhile = locate $
   do synlex LexWhile
      expr <- synexpr
      content <- synblock
-     return (SynWhile expr content)
+     return $ SynWhile expr content
 
 -- == for
 -- | Syntactic construct for 'for'
@@ -230,7 +229,7 @@ synfor = locate $
      synlex LexIn
      range <- synexpr
      content <- synblock
-     return (SynFor i range content)
+     return $ SynFor i range content
 
 -- | SynParser for parallel for
 synforp :: SynParser SynFor

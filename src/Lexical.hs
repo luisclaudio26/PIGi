@@ -167,17 +167,17 @@ lexfloat = locate $ do
 -- | Parses a integer literal
 lexint :: LexParser
 lexint = locate $ do
-    v <- Number.int
+    v <- Number.decimal
     return (LexLitInt v)
 
 -- | Parses a number
 lexnumber :: LexParser
-lexnumber = try(lexfloat) <|> lexint
+lexnumber = try lexfloat <|> lexint
 
 -- | Parses any valid lexical token
 lexunit :: LexParser
 lexunit = do
-    tk <- try(lexnumber) <|> try(lexident) <|> lexreserved
+    tk <- try lexnumber <|> try lexident <|> lexreserved
     spaces
     return tk
 
