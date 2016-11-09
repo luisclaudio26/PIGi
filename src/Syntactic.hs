@@ -219,7 +219,8 @@ synwhile = locate $
 
 -- == for
 -- | Syntactic construct for 'for'
-data SynFor = SynFor (Located SynIdent) (Located SynExpr) deriving (Show)
+data SynFor = SynFor (Located SynIdent) (Located SynExpr) (Located SynBlock)
+            | SynForP [Located SynIdent] (Located SynExpr) (Located SynBlock) deriving (Show)
 
 -- | SynParser for 'for'
 synfor :: SynParser SynFor
@@ -228,7 +229,19 @@ synfor = locate $
      i <- synident
      synlex LexIn
      range <- synexpr
-     return (SynFor i range)
+     content <- synblock
+     return (SynFor i range content)
+
+-- | SynParser for parallel for
+synforp :: SynParser SynFor
+synforp = locate $
+  do synlex LexFor
+     i <- fmap getidentlist synidentlist
+     synlex LexParallel
+     expr <- synexpr
+     content <- synblock
+     return $ SynForP i expr content
+
 
 -- | Syntactic construct for expression list
 data SynExprList = SynExprList { getexprlist :: [Located SynExpr] }
@@ -452,11 +465,11 @@ synexpr = buildExpressionParser synoptable synexprUnit
 -- !! EVERYTHING BELOW THIS LINE IS WRONG !!
 
 -- | Syntactic construct for module
-data SynModule = SynModule [Located SynAttr] deriving (Show)
+data SynModule = SynModule [Located SynFor] deriving (Show)
 
 -- | SynParser for whole module
 synmodule :: SynParser SynModule
 synmodule = locate $
-    do ids <- many synattr
+    do ids <- many synforp
        eof
        return (SynModule ids)
