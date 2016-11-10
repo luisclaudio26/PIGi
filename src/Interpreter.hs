@@ -35,3 +35,8 @@ instance Monad Exec where
     return = execunit
     (>>=) = execbind
 
+runstmt :: SynStmt -> Exec ()
+runstmt stmt = execunit ()
+
+runstmts :: [SynStmt] -> Exec ()
+runstmts stmts = mapM_ runstmt stmts

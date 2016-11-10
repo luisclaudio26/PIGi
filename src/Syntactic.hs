@@ -94,13 +94,6 @@ synlitbool = syntoken $
             (LexLitBool b) -> Just (SynLitBool b)
             _ -> Nothing
 
-data SynStmt = SynStmtDef (Located SynDef) deriving (Show) 
-
-synstmt :: SynParser SynStmt
-synstmt = locate $
-  do def <- syndef
-     return (SynStmtDef def)
-
 -- = Definitions
 
 -- | Syntactic construct for definition

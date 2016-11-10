@@ -7,6 +7,14 @@ import Lexical
 import Syntactic
 import Interpreter
 
+runinterpreter :: String -> String -> IO ()
+runinterpreter filename input =
+    do mod <- runsynparser filename input
+       let stmts = case (ignorepos mod) of (SynModule x) -> x
+           exec = runstmts (map ignorepos stmts)
+       execIO exec State
+       return ()
+
 runsynparser :: String -> String -> IO (Located SynModule)
 runsynparser filename input =
     do tokens <- runlexparser filename input
@@ -39,7 +47,7 @@ run ["-l"] =
 run ["-s", filename] =
     readFile filename >>= runsynparser filename >> return ()
 run [filename] =
-    error "Interpreter not implemented yet"
+    readFile filename >>= runinterpreter filename >> return ()
 run [] = putStrLn "Usage [(-l | -s)] filename"
 
 main :: IO ()
