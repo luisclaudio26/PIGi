@@ -146,6 +146,8 @@ syndefattr = locate $
 -- | Statement syntactic construct
 data SynStmt = SynStmtDef (Located SynDef)
              | SynStmtAttr (Located SynAttr)
+             | SynStmtDefAttr (Located SynDefAttr)
+             | SynStmtIf (Located SynIf)
 
 instance Show SynStmt where
     show (SynStmtDef  x) = show x ++ "\n"
@@ -153,7 +155,8 @@ instance Show SynStmt where
 
 synstmt :: SynParser SynStmt
 synstmt = locate $ fmap SynStmtDef syndef 
-                  <|> fmap SynStmtAttr synattr
+               <|> fmap SynStmtAttr synattr
+               <|> fmap SynStmtIf synifstr 
 
 -- | Syntactic construct for block
 data SynBlock = SynBlock [Located SynStmt] deriving (Show)
@@ -170,44 +173,42 @@ synblock = locate $
 
 -- == If / ifelse / else
 
--- === if
+-- | Syntactic construct for if/ifelse/else
+data SynIf = SynIf [(Located SynExpr, Located SynBlock)]
+                   (Maybe (Located SynBlock))
+                   deriving (Show)
 
--- | Syntactic construct for if
-data SynIf = SynIf (Located SynExpr) (Located SynBlock) deriving (Show)
+synifstr :: SynParser SynIf
+synifstr = locate $
+    do synlex LexIf
+       cblock1 <- synif
+       cblocks <- many synelseif
+       elseblock <- fmap Just synelse <|> return Nothing
+       return $ SynIf (cblock1:cblocks) elseblock
+
 
 -- | SynParser for if
-synif :: SynParser SynIf
-synif = locate $
-  do synlex LexIf
-     expr <- synexpr
-     content <- synblock
-     return (SynIf expr content)
+synif :: SynSpecParser (Located SynExpr, Located SynBlock)
+synif = do synlex LexIf
+           expr <- synexpr
+           content <- synblock
+           return (expr, content)
 
--- === if else
-
--- | Syntactic construct for else id
-data SynElseIf = SynElseIf (Located SynExpr) (Located SynBlock) deriving (Show)
 
 -- | SynParser for else if
-synelseif :: SynParser SynElseIf
-synelseif = locate $
-  do synlex LexElse
-     synlex LexIf
-     expr <- synexpr
-     content <- synblock
-     return (SynElseIf expr content)
+synelseif :: SynSpecParser (Located SynExpr, Located SynBlock)
+synelseif = do synlex LexElse
+               synlex LexIf
+               expr <- synexpr
+               content <- synblock
+               return (expr, content)
 
--- === else
-
--- | Syntactic construct for 'else'
-data SynElse = SynElse (Located SynBlock) deriving (Show)
 
 -- | SynParser for 'else'
-synelse :: SynParser SynElse
-synelse = locate $
-  do synlex LexElse
-     content <- synblock
-     return (SynElse content)
+synelse :: SynParser SynBlock
+synelse = do synlex LexElse
+             content <- synblock
+             return content
 
 -- == while
 
