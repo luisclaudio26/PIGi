@@ -54,20 +54,19 @@ synidentlist = fmap SynIdentList $ sepBy synident (synlex LexComma)
 -- | Syntactic construct for typed identifier
 data SynTypedIdent = SynTypedIdent (Located SynIdent) (Located SynIdent) deriving (Show)
 
--- | SynParser for single typed identifier
-syntypedident :: SynParser SynTypedIdent
-syntypedident = locate $
-  do var <- synident
-     synlex LexColon
-     vartype <- synident
-     return $ SynTypedIdent var vartype
+syntypedidentlist :: SynSpecParser [SynTypedIdent]
+syntypedidentlist = do var <- fmap getidentlist synidentlist
+                       synlex LexColon
+                       vartype <- synident
+                       let f t i = SynTypedIdent i t
+                       return $ fmap (f vartype) var
 
 -- | Syntactic construct for typed identifier list
-data SynTypedIdentList = SynTypedIdentList { gettypedidentlist :: [Located SynTypedIdent] }
-
+data SynTypedIdentList = SynTypedIdentList { gettypedidentlist :: [[SynTypedIdent]] }
 -- | SynParser for list of identifiers
-syntypedidentlist :: SynSpecParser SynTypedIdentList
-syntypedidentlist = fmap SynTypedIdentList $ sepBy syntypedident (synlex LexComma)
+syntypedidentlista :: SynSpecParser SynTypedIdentList
+syntypedidentlista = fmap SynTypedIdentList $ sepBy syntypedidentlist (synlex LexComma)
+
 
 -- | Syntactic construct for integer literal
 data SynLitInt = SynLitInt { getint :: Int } 
@@ -117,13 +116,9 @@ data SynDef = SynDef [SynTypedIdent] deriving (Show)
 syndef :: SynParser SynDef
 syndef = locate $ 
   do synlex LexDef
-     var <- fmap getidentlist synidentlist
-     synlex LexColon
-     vartype <- synident  
+     vartyped <- syntypedidentlist 
      synlex LexSemicolon
-     let f t i = SynTypedIdent i t  
-     return . SynDef $ fmap (f vartype) var
-
+     return $ SynDef vartyped
 -- = Attribution
 
 -- == Simple attribution 
@@ -148,14 +143,12 @@ data SynDefAttr = SynDefAttr [SynTypedIdent] [Located SynExpr] deriving (Show)
 syndefattr :: SynParser SynDefAttr
 syndefattr = locate $
   do synlex LexDef
-     var <- fmap getidentlist synidentlist
-     synlex LexColon
-     vartype <- synident
+     vartyped <- syntypedidentlist
      synlex LexAttr
      value <- fmap getexprlist synexprlist
      synlex LexSemicolon
      let f t i = SynTypedIdent i t  
-     return $ SynDefAttr (fmap (f vartype) var) value
+     return $ SynDefAttr vartyped value
 
 -- | Statement syntactic construct
 data SynStmt = SynStmtDef (Located SynDef)
@@ -264,7 +257,7 @@ synforp = locate $
      return $ SynForP i expr content
 
 -- | Syntactic construct for 'struct'
-data SynStruct = SynStruct (Located SynIdent) [Located SynTypedIdent] deriving (Show)
+data SynStruct = SynStruct (Located SynIdent) [[SynTypedIdent]] deriving (Show)
 
 -- | SynParser for 'struct'
 synstruct :: SynParser SynStruct
@@ -273,7 +266,7 @@ synstruct = locate $
      name <- synident
      synlex LexAttr
      synlex LexLParen
-     i <- fmap gettypedidentlist syntypedidentlist
+     i <- fmap gettypedidentlist syntypedidentlista
      synlex LexRParen
      synlex LexSemicolon
      return $ SynStruct name i
@@ -498,11 +491,11 @@ synexpr = buildExpressionParser synoptable synexprUnit
 -- !! EVERYTHING BELOW THIS LINE IS WRONG !!
 
 -- | Syntactic construct for module
-data SynModule = SynModule [Located SynStmt] deriving (Show)
+data SynModule = SynModule [Located SynStruct] deriving (Show)
 
 -- | SynParser for whole module
 synmodule :: SynParser SynModule
 synmodule = locate $
-    do ids <- many synstmt
+    do ids <- many synstruct
        eof
        return (SynModule ids)
