@@ -31,7 +31,6 @@ synlex :: LexToken -> SynParser SynToken
 synlex lextok = syntoken $
     \t -> if t == lextok then Just (SynToken t) else Nothing
 
-
 -- | Syntactic construct for identifier
 data SynIdent = SynIdent { getlabel :: String } -- deriving (Show)
 
@@ -45,15 +44,30 @@ synident = syntoken $
             (LexIdent s) -> Just (SynIdent s)
             _ -> Nothing
 
--- | Syntactic construct for typed identifier
-data SynTypedIdent = SynTypedIdent (Located SynIdent) (Located SynIdent) deriving (Show)
-
 -- | Syntactic construct for identifiers list
-data SynIdentList = SynIdentList { getidentlist :: [Located SynIdent] }
+data SynIdentList = SynIdentList { getidentlist :: [Located SynIdent] } deriving (Show)
 
 -- | SynParser for list of identifiers
 synidentlist :: SynSpecParser SynIdentList
 synidentlist = fmap SynIdentList $ sepBy synident (synlex LexComma) 
+
+-- | Syntactic construct for typed identifier
+data SynTypedIdent = SynTypedIdent (Located SynIdent) (Located SynIdent) deriving (Show)
+
+-- | SynParser for single typed identifier
+syntypedident :: SynParser SynTypedIdent
+syntypedident = locate $
+  do var <- synident
+     synlex LexColon
+     vartype <- synident
+     return $ SynTypedIdent var vartype
+
+-- | Syntactic construct for typed identifier list
+data SynTypedIdentList = SynTypedIdentList { gettypedidentlist :: [Located SynTypedIdent] }
+
+-- | SynParser for list of identifiers
+syntypedidentlist :: SynSpecParser SynTypedIdentList
+syntypedidentlist = fmap SynTypedIdentList $ sepBy syntypedident (synlex LexComma)
 
 -- | Syntactic construct for integer literal
 data SynLitInt = SynLitInt { getint :: Int } 
@@ -124,7 +138,7 @@ synattr = locate $
      synlex LexAttr -- <|> synlex LexPlusAttr <|> synlex LexMinusAttr <|> synlex LexTimesAttr <|> synlex LexDivAttr
      value <- fmap getexprlist synexprlist
      synlex LexSemicolon
-     return (SynAttr var value)
+     return $ SynAttr var value
 
 -- = Definition and attribution
 -- | Syntactic construct for definition & attribution
@@ -167,7 +181,7 @@ synblock = locate $
   do synlex LexLBraces
      stmts <- many synstmt
      synlex LexRBraces
-     return (SynBlock stmts)
+     return $ SynBlock stmts
 
 -- = Conditional structures:
 
@@ -178,6 +192,7 @@ data SynIf = SynIf [(Located SynExpr, Located SynBlock)]
                    (Maybe (Located SynBlock))
                    deriving (Show)
 
+-- | SynParser for if/elseif/else structures
 synifstr :: SynParser SynIf
 synifstr = locate $
     do synlex LexIf
@@ -203,12 +218,12 @@ synelseif = do synlex LexElse
                content <- synblock
                return (expr, content)
 
-
 -- | SynParser for 'else'
 synelse :: SynParser SynBlock
 synelse = do synlex LexElse
              content <- synblock
              return content
+
 
 -- == while
 
@@ -221,7 +236,7 @@ synwhile = locate $
   do synlex LexWhile
      expr <- synexpr
      content <- synblock
-     return (SynWhile expr content)
+     return $ SynWhile expr content
 
 -- == for
 -- | Syntactic construct for 'for'
@@ -236,7 +251,7 @@ synfor = locate $
      synlex LexIn
      range <- synexpr
      content <- synblock
-     return (SynFor i range content)
+     return $ SynFor i range content
 
 -- | SynParser for parallel for
 synforp :: SynParser SynFor
@@ -248,6 +263,20 @@ synforp = locate $
      content <- synblock
      return $ SynForP i expr content
 
+-- | Syntactic construct for 'struct'
+data SynStruct = SynStruct (Located SynIdent) [Located SynTypedIdent] deriving (Show)
+
+-- | SynParser for 'struct'
+synstruct :: SynParser SynStruct
+synstruct = locate $
+  do synlex LexStruct
+     name <- synident
+     synlex LexAttr
+     synlex LexLParen
+     i <- fmap gettypedidentlist syntypedidentlist
+     synlex LexRParen
+     synlex LexSemicolon
+     return $ SynStruct name i
 
 -- | Syntactic construct for expression list
 data SynExprList = SynExprList { getexprlist :: [Located SynExpr] }
