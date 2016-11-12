@@ -261,11 +261,11 @@ synforp = locate $
 -- | Syntactic construct for 'struct'
 data SynStruct = SynStruct (Located SynIdent) [SynTypedIdent] deriving (Show)
 
--- | SynParser for 'struct'
 collapseList::[[SynTypedIdent]] -> [SynTypedIdent]
 collapseList [] = []
 collapseList (h:t) = h ++ (collapseList t)
 
+-- | SynParser for 'struct'
 synstruct :: SynParser SynStruct
 synstruct = locate $
   do synlex LexStruct
@@ -276,6 +276,36 @@ synstruct = locate $
      synlex LexRParen
      synlex LexSemicolon
      return $ SynStruct name (collapseList i)
+
+-- | Syntactic construct for 'proc'
+data SynProc = SynProc (Located SynIdent) [SynTypedIdent] (Located SynBlock) deriving (Show)
+
+-- | SynParser for definition of a procedure
+synproc :: SynParser SynProc
+synproc = locate $
+  do synlex LexProc
+     name <- synident
+     synlex LexLParen
+     i <- fmap gettypedidentlist synTypedIdentList
+     synlex LexRParen
+     content <- synblock
+     return $ SynProc name (collapseList i) content
+
+-- | Syntactic construct for 'func'
+data SynFunc = SynFunc (Located SynIdent) [SynTypedIdent] (Located SynBlock) [SynTypedIdent] deriving (Show)
+
+-- | SynParser for definition of a function
+synfunc :: SynParser SynFunc
+synfunc = locate $
+  do synlex LexFunc
+     argsreturn <- fmap gettypedidentlist synTypedIdentList
+     synlex LexAttr
+     name <- synident
+     synlex LexLParen
+     i <- fmap gettypedidentlist synTypedIdentList
+     synlex LexRParen
+     content <- synblock
+     return $ SynFunc name (collapseList i) content (collapseList argsreturn)
 
 -- | Syntactic construct for expression list
 data SynExprList = SynExprList { getexprlist :: [Located SynExpr] }
@@ -497,11 +527,11 @@ synexpr = buildExpressionParser synoptable synexprUnit
 -- !! EVERYTHING BELOW THIS LINE IS WRONG !!
 
 -- | Syntactic construct for module
-data SynModule = SynModule [Located SynStruct] deriving (Show)
+data SynModule = SynModule [Located SynFunc] deriving (Show)
 
 -- | SynParser for whole module
 synmodule :: SynParser SynModule
 synmodule = locate $
-    do ids <- many synstruct
+    do ids <- many synfunc
        eof
        return (SynModule ids)
