@@ -526,12 +526,29 @@ synexpr = buildExpressionParser synoptable synexprUnit
 
 -- !! EVERYTHING BELOW THIS LINE IS WRONG !!
 
--- | Syntactic construct for module
-data SynModule = SynModule [Located SynFunc] deriving (Show)
+-- | Syntactic constructs 
+-- | and SynParser for module
+data SynModStmt = SynModStruct (Located SynStruct)
+                | SynModDef (Located SynDef)
+                | SynModProc (Located SynProc)
+                | SynModFunc (Located SynFunc) deriving (Show)
+
+data SynModule = SynModule 
+                  { modName :: Located SynIdent
+                  , modStmts :: [SynModStmt]
+                  } deriving (Show)
+
+synModStmt :: SynSpecParser SynModStmt
+synModStmt = (fmap SynModStruct synstruct) <|> 
+              (fmap SynModDef syndef) <|> 
+              (fmap SynModProc synproc) <|> 
+              (fmap SynModFunc synfunc)
 
 -- | SynParser for whole module
 synmodule :: SynParser SynModule
 synmodule = locate $
-    do ids <- many synfunc
+    do synlex LexModule
+       moduleName <- synident
+       stmts <- many synModStmt
        eof
-       return (SynModule ids)
+       return (SynModule moduleName stmts)

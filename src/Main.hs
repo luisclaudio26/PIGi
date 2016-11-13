@@ -8,10 +8,10 @@ import Syntactic
 import Interpreter
 
 runinterpreter :: SynModule -> IO ()
-runinterpreter mod =
+runinterpreter mod = {-
     do let stmts = case mod of (SynModule x) -> x
            exec = runstmts (map ignorepos stmts)
-       execIO exec State
+       execIO exec State -}
        return ()
 
 
