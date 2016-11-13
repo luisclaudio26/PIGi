@@ -6,6 +6,7 @@ import PosParsec
 import Lexical
 import Syntactic
 import Interpreter
+import StaticAnalyzer
 
 runinterpreter :: SynModule -> IO ()
 runinterpreter mod = {-
@@ -23,10 +24,19 @@ runsynparser tokens filename =
                            fail "syntactic error"
             Right syntree -> return syntree
 
+-- TODO: receive a list of SynModules, apply semModule to
+-- each one.
+runstaticanalyzer :: SynModule -> Either String SynModule
+runstaticanalyzer mod = semModule mod
+
+printStaticAnalyzer :: Either String SynModule -> IO ()
+printStaticAnalyzer x = case x of
+                          Right x -> putStrLn "Ok"
+                          Left msg -> putStrLn $ "Error : " ++ msg
+
 
 printsyn :: SynModule -> IO ()
 printsyn = print
-
 
 printlex :: [PosLexToken] -> IO ()
 printlex tokens = 
@@ -54,8 +64,16 @@ run args =
        if elem "-s" opts
           then printsyn syn
           else return ()
+
+       checkedSyn <- return (runstaticanalyzer syn) -- [LUIS] Não entendi porque tem de por return aqui.
+       if elem "-a" opts
+          then printStaticAnalyzer checkedSyn
+          else return ()
+
        if length opts == 0
-          then runinterpreter syn
+          then case checkedSyn of 
+                Right mod -> runinterpreter mod
+                Left error -> putStrLn $ "Semantic error: " ++ error
           else return ()
 
     where isopt (c:cs) = c == '-'
