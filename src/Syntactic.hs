@@ -293,7 +293,10 @@ synproc = locate $
      return $ SynProc name (collapseList i) content
 
 -- | Syntactic construct for 'func'
-data SynFunc = SynFunc (Located SynIdent) [SynTypedIdent] (Located SynBlock) [SynTypedIdent] deriving (Show)
+data SynFunc = SynFunc { getFuncName :: (Located SynIdent) 
+                       , getFuncArgs :: [SynTypedIdent]  
+                       , getFuncRet :: [SynTypedIdent]
+                       , getFuncBlock :: (Located SynBlock) } deriving (Show)
 
 -- | SynParser for definition of a function
 synfunc :: SynParser SynFunc
@@ -306,7 +309,7 @@ synfunc = locate $
      i <- fmap gettypedidentlist synTypedIdentList
      synlex LexRParen
      content <- synblock
-     return $ SynFunc name (collapseList i) content (collapseList argsreturn)
+     return $ SynFunc name (collapseList i) (collapseList argsreturn) content
 
 -- | Syntactic construct for expression list
 data SynExprList = SynExprList { getexprlist :: [Located SynExpr] }

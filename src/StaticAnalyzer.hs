@@ -12,10 +12,13 @@ import PosParsec(ignorepos)
 -- SynProc, SynStruct - then builds a list of
 -- identifiers altogether with its type (and 
 -- any other information that might be useful).
-data STEntry = STEntry { getId :: String    -- identifier
-                       , getType :: String  -- type
-                       , getMod :: String   -- module where it was defined
-                        } deriving (Show)
+data STEntry = Variable { getVarId :: String    -- identifier
+                        , getVarType :: String  -- type
+                        , getVarMod :: String }  -- module where it was defined 
+             | Function { getFuncName :: String
+                        , getFuncType :: String
+                        , getFuncMod :: String } deriving (Show)
+
 type SymbolTable = [STEntry]
 
 -- TODO: We should receive a SynProgram, which is
@@ -45,15 +48,26 @@ stFromProc :: SymbolTable -> String -> SynProc -> SymbolTable
 stFromProc st modid proc = st
 
 stFromFunc :: SymbolTable -> String -> SynFunc -> SymbolTable
-stFromFunc st modid func = st
+stFromFunc st modid (SynFunc name formalParam ret block) = entry : st
+                                                            where entry = Function (getlabel $ ignorepos $ name)
+                                                                                   (buildFuncTypeStr formalParam ret)
+                                                                                    modid
+buildFuncTypeStr :: [SynTypedIdent] -> [SynTypedIdent] -> String
+buildFuncTypeStr formalParam ret = fp ++ "->" ++ rv
+                                    where
+                                        fp = show (getTypedIdentType `fmap` formalParam)
+                                        rv = show (getTypedIdentType `fmap` ret)
 
+
+-- TODO: Code for entry is to big; maybe we could create some 
+-- helper functions to make it smaller.
 stFromTypedIdentList :: SymbolTable -> String -> [SynTypedIdent] -> SymbolTable
 stFromTypedIdentList st modid [] = st
 stFromTypedIdentList st modid (h:t) = stFromTypedIdentList newST modid t
                                         where newST = entry : st
-                                              entry = STEntry (getlabel $ ignorepos $ getTypedIdentName h) 
-                                                              (getlabel $ ignorepos $ getTypedIdentType h) 
-                                                               modid 
+                                              entry = Variable (getlabel $ ignorepos $ getTypedIdentName h) 
+                                                               (getlabel $ ignorepos $ getTypedIdentType h) 
+                                                                modid 
 
 -----------------------------------------------
 --------- Static analyzer for modules --------- TODO: Move this to another file when 
