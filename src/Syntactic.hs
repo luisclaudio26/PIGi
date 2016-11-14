@@ -52,7 +52,8 @@ synidentlist :: SynSpecParser SynIdentList
 synidentlist = fmap SynIdentList (synident `sepBy` (synlex LexComma))
 
 -- | Syntactic construct for typed identifier
-data SynTypedIdent = SynTypedIdent (Located SynIdent) (Located SynIdent) deriving (Show)
+data SynTypedIdent = SynTypedIdent { getTypedIdentName :: (Located SynIdent)
+                                   , getTypedIdentType :: (Located SynIdent) } deriving (Show)
 
 synSingleTypeIdentList :: SynSpecParser [SynTypedIdent]
 synSingleTypeIdentList = do var <- fmap getidentlist synidentlist
