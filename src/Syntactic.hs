@@ -113,7 +113,8 @@ synlitbool = syntoken $
 -- = Definitions
 
 -- | Syntactic construct for definition
-data SynDef = SynDef [SynTypedIdent] deriving (Show)
+data SynDef = SynDef { getDefTypedIdents :: [SynTypedIdent]
+                     } deriving (Show)
 
 -- | SynParser for definition of variable
 syndef :: SynParser SynDef
@@ -169,7 +170,7 @@ synstmt = locate $ fmap SynStmtDef syndef
                <|> fmap SynStmtIf synifstr 
 
 -- | Syntactic construct for block
-data SynBlock = SynBlock [Located SynStmt] deriving (Show)
+data SynBlock = SynBlock { getStmts :: [Located SynStmt] } deriving (Show)
 
 -- | SynParser for block
 synblock :: SynParser SynBlock
@@ -279,7 +280,10 @@ synstruct = locate $
      return $ SynStruct name (collapseList i)
 
 -- | Syntactic construct for 'proc'
-data SynProc = SynProc (Located SynIdent) [SynTypedIdent] (Located SynBlock) deriving (Show)
+data SynProc = SynProc { getProcIdent :: (Located SynIdent)
+                       , getProcArgs ::  [SynTypedIdent]
+                       , getProcBlock :: (Located SynBlock)
+                       } deriving (Show)
 
 -- | SynParser for definition of a procedure
 synproc :: SynParser SynProc
@@ -291,6 +295,9 @@ synproc = locate $
      synlex LexRParen
      content <- synblock
      return $ SynProc name (collapseList i) content
+
+getProcName :: SynProc -> String
+getProcName p = getlabel . ignorepos . getProcIdent $ p
 
 -- | Syntactic construct for 'func'
 data SynFunc = SynFunc { getFuncName :: (Located SynIdent) 

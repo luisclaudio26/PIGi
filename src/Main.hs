@@ -9,10 +9,8 @@ import Interpreter
 import StaticAnalyzer
 
 runinterpreter :: SynModule -> IO ()
-runinterpreter mod = {-
-    do let stmts = case mod of (SynModule x) -> x
-           exec = runstmts (map ignorepos stmts)
-       execIO exec State -}
+runinterpreter mod =
+    do execIO (runmodule mod) newProgramState
        return ()
 
 
@@ -27,7 +25,7 @@ runsynparser tokens filename =
 -- TODO: receive a list of SynModules, apply semModule to
 -- each one.
 runstaticanalyzer :: SynModule -> Either String SynModule
-runstaticanalyzer mod = semModule mod
+runstaticanalyzer mod = Right mod -- semModule mod
 
 printStaticAnalyzer :: Either String SynModule -> IO ()
 printStaticAnalyzer x = case x of
