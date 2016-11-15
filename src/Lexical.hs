@@ -125,7 +125,20 @@ symbolTable = [("(", LexLParen)
 
 -- | Lists all keywords.
 keywords :: [String]
-keywords = map fst keywordTable
+keywords = (map fst keywordTable) ++ typeNames
+  where typeNames = ["int"
+                    ,"float"
+                    ,"bool"
+                    ,"struct"
+                    ,"string"
+                    ,"vec"
+                    ,"vec2"
+                    ,"vec3"
+                    ,"vec4"
+                    ,"mat"
+                    ,"mat2"
+                    ,"mat3"
+                    ,"mat4"]
 
 -- | A lexical token combined with its source code position
 type PosLexToken = Located LexToken
@@ -137,7 +150,7 @@ type LexParser = Parsec String () PosLexToken
 lextoken :: LexToken -> String -> LexParser
 lextoken token s = locate $
     do string s
-       return token
+       return token 
 
 -- | Parses identifier.
 lexident :: LexParser
