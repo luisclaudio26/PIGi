@@ -127,20 +127,7 @@ symbolTable = [("(", LexLParen)
 
 -- | Lists all keywords.
 keywords :: [String]
-keywords = (map fst keywordTable) ++ typeNames
-  where typeNames = ["int"
-                    ,"float"
-                    ,"bool"
-                    ,"struct"
-                    ,"string"
-                    ,"vec"
-                    ,"vec2"
-                    ,"vec3"
-                    ,"vec4"
-                    ,"mat"
-                    ,"mat2"
-                    ,"mat3"
-                    ,"mat4"]
+keywords = (map fst keywordTable)
 
 -- | A lexical token combined with its source code position
 type PosLexToken = Located LexToken
