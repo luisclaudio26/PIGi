@@ -61,6 +61,7 @@ data LexToken = LexLParen         -- ^ @(@ token
               | LexLitInt Int     -- ^ @int@ literal
               | LexLitFloat Float -- ^ @float@ literal
               | LexLitBool Bool   -- ^ @bool@ literal
+              | LexModule
               deriving (Show, Eq)
 
 -- | Map between keywords and lexical tokens
@@ -69,6 +70,7 @@ keywordTable = [("and", LexAnd)
                ,("or", LexOr)
                ,("not", LexNot)
                ,("xor", LexXor)
+               ,("module", LexModule) -- This must come before mod, otherwise we'll have problems!
                ,("mod", LexMod)
                ,("def", LexDef)
                ,("func", LexFunc)

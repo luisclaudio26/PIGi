@@ -5,20 +5,43 @@ import Text.Parsec (parse)
 import PosParsec
 import Lexical
 import Syntactic
+import Interpreter
+import StaticAnalyzer
 
-runsynparser :: String -> String -> IO (Located SynModule)
-runsynparser filename input =
-    do tokens <- runlexparser filename input
-       let result = parse synmodule filename tokens
+runinterpreter :: SynModule -> IO ()
+runinterpreter mod = {-
+    do let stmts = case mod of (SynModule x) -> x
+           exec = runstmts (map ignorepos stmts)
+       execIO exec State -}
+       return ()
+
+
+runsynparser :: [PosLexToken] -> String -> IO (Located SynModule)
+runsynparser tokens filename =
+    do let result = parse synmodule filename tokens
        case result of
             Left msg -> do print msg
                            fail "syntactic error"
-            Right syntree -> do print syntree
-                                return syntree
+            Right syntree -> return syntree
 
-printlextokens :: [PosLexToken] -> IO ()
-printlextokens tokens = 
+-- TODO: receive a list of SynModules, apply semModule to
+-- each one.
+runstaticanalyzer :: SynModule -> Either String SynModule
+runstaticanalyzer mod = semModule mod
+
+printStaticAnalyzer :: Either String SynModule -> IO ()
+printStaticAnalyzer x = case x of
+                          Right x -> putStrLn "Ok"
+                          Left msg -> putStrLn $ "Error : " ++ msg
+
+
+printsyn :: SynModule -> IO ()
+printsyn = print
+
+printlex :: [PosLexToken] -> IO ()
+printlex tokens = 
     mapM_ (print . ignorepos) tokens
+
 
 runlexparser :: String -> String -> IO [PosLexToken]
 runlexparser filename input =
@@ -27,19 +50,36 @@ runlexparser filename input =
          Left msg -> do print msg
                         fail "lexical error"
 
-         Right tokens -> do printlextokens tokens
-                            return tokens
+         Right tokens -> return tokens
+
 
 run :: [String] -> IO ()
-run ["-l", filename] =
-    readFile filename >>= runlexparser filename >> return ()
-run ["-l"] =
-    getContents >>= runlexparser "(stdin)" >> return ()
-run ["-s", filename] =
-    readFile filename >>= runsynparser filename >> return ()
-run [filename] =
-    error "Interpreter not implemented yet"
-run [] = putStrLn "Usage [(-l | -s)] filename"
+run args =
+    do file <- readFile filename
+       lex  <- runlexparser filename file
+       if elem "-l" opts
+          then printlex lex
+          else return ()
+       syn <- fmap ignorepos (runsynparser lex filename)
+       if elem "-s" opts
+          then printsyn syn
+          else return ()
+
+       checkedSyn <- return (runstaticanalyzer syn) -- [LUIS] Não entendi porque tem de por return aqui.
+       if elem "-a" opts
+          then printStaticAnalyzer checkedSyn
+          else return ()
+
+       if length opts == 0
+          then case checkedSyn of 
+                Right mod -> runinterpreter mod
+                Left error -> putStrLn $ "Semantic error: " ++ error
+          else return ()
+
+    where isopt (c:cs) = c == '-'
+          opts = filter isopt args
+          filename = head (filter (not . isopt) args)
+
 
 main :: IO ()
 main = do putStrLn "<< PIG language interpreter >>"
