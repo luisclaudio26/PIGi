@@ -5,10 +5,22 @@ import Data.List (find)
 import Syntactic
 import PosParsec
 
-data Scope = Global | Local Int
+-- = Program State
 
-data Val = IntVal Int | FloatVal Float | BoolVal Bool | None deriving (Show)
+-- | Scope level
+data Scope = Global 
+           | Local Int
 
+
+-- | Value
+data Val = IntVal Int
+         | FloatVal Float
+         | BoolVal Bool
+         | None
+         deriving (Show)
+
+
+-- | Value type
 data Type = IntType
           | FloatType
           | BoolType
@@ -17,35 +29,50 @@ data Type = IntType
           | FuncType [Type] [Type] deriving (Show)
 
 
+-- | Variable
 data Var = Var { getVarName :: String 
                , getVarType :: Type
                , getVarValue :: Val
                } deriving (Show)
 
+
+-- | Update variable value
 setVarValue :: Var -> Val -> Var
 setVarValue var val = Var (getVarName var) (getVarType var) val
 
-data ProgramState = State { getVarTable :: [Var] -- ^ Variable table
-                          , getStructTable :: [Type] -- ^ Struct table
-                          , getProcTable :: [SynProc] -- ^ Procedure table
-                          , getFuncTable :: [SynFunc] -- ^ Function table
-                          }
 
+-- | Program State
+data ProgramState =
+    State { getVarTable :: [Var] -- ^ Variable table
+          , getStructTable :: [Type] -- ^ Struct table
+          , getProcTable :: [SynProc] -- ^ Procedure table
+          , getFuncTable :: [SynFunc] -- ^ Function table
+          }
+
+
+-- | Initial program state
 newProgramState :: ProgramState
 newProgramState = State [] [] [] []
------------------------------------------------------------------
 
--- | Execution part type
+
+-- = Execution monad
+
+-- | Execution monad
 -- Contains a state updating function and
 -- a value obtention function
 data Exec a =
     Exec { execEvalIO :: ProgramState -> IO (ProgramState, a) }
 
+
+-- | Run execution, ignore value
 execIO :: Exec a -> ProgramState -> IO ProgramState
 execIO ex state = fmap fst $ execEvalIO ex state
 
+
+-- | Run execution, ignore new state
 evalIO :: Exec a -> ProgramState -> IO a
 evalIO ex state = fmap snd $ execEvalIO ex state
+
 
 -- | Create valueless execution part
 mkExec :: (ProgramState -> IO ProgramState)
@@ -63,8 +90,8 @@ mkEval f = Exec $ \state ->
        return (state, val)
 
 
-execmap :: (a -> b) -> Exec a -> Exec b
-execmap f (Exec x) = Exec $
+execfmap :: (a -> b) -> Exec a -> Exec b
+execfmap f (Exec x) = Exec $
     \state -> do evalexec <- x state
                  let state' = fst evalexec
                      val = snd evalexec
@@ -83,22 +110,29 @@ execbind m k = Exec $
                      val = snd mid
                  execEvalIO (k val) state'
 
+
 instance Functor Exec where
-    fmap = execmap
+    fmap = execfmap
+
 
 instance Applicative Exec where
     pure = execunit
     (<*>) = ap
 
+
 instance Monad Exec where
     return = execunit
     (>>=) = execbind
 
-----------------------------------------------------
 
+-- = Table access execution
+
+-- | Get current variable table
 obtainVarTable :: Exec [Var]
 obtainVarTable = mkEval $ return . getVarTable
 
+
+-- | Set current variable table
 modifyVarTable :: [Var] -> Exec ()
 modifyVarTable vt = mkExec $
     \state -> let st = getStructTable state
@@ -106,12 +140,18 @@ modifyVarTable vt = mkExec $
                   ft = getFuncTable state
                in return (State vt st pt ft)
 
+
+-- | Get current struct table
 obtainStructTable :: Exec [Type]
 obtainStructTable = mkEval $ return . getStructTable
 
+
+-- | Get current procedure table
 obtainProcTable :: Exec [SynProc]
 obtainProcTable = mkEval $ return . getProcTable
 
+
+-- | Set current procedure table
 modifyProcTable :: [SynProc] -> Exec ()
 modifyProcTable pt = mkExec $
     \state -> let vt = getVarTable state
@@ -119,21 +159,26 @@ modifyProcTable pt = mkExec $
                   ft = getFuncTable state
                in return (State vt st pt ft)
 
-----------------------------------------------------
 
+-- = Auxiliary functions
+
+-- == Debug
+
+-- | Print line
 runPrintLn :: String -> Exec ()
 runPrintLn s = mkExec $ \state ->
     do putStrLn s
        return state
 
-
+-- | Prints full variable table
 runStatus :: Exec ()
 runStatus =
     do vt <- obtainVarTable
        runPrintLn "status> "
        mapM_ (runPrintLn . show) vt
 
-----------------------------------------------------
+
+-- == Procedure table auxiliary functions
 
 findProc :: String -> Exec SynProc
 findProc procname =
@@ -144,6 +189,8 @@ findProc procname =
          Nothing -> error $ "couldn't find procedure " ++ procname
 
 
+-- == Struct table auxiliary functions
+
 findType :: SynIdent -> Exec Type
 findType (SynIdent i)
   | i == "int" = return IntType
@@ -152,31 +199,33 @@ findType (SynIdent i)
   | otherwise = error $ "couldn't find type " ++ i
 
 
+-- == Variable table auxiliary functions
+
+-- | Search for variable on table
+findVar :: SynIdent -> Exec Var
+findVar varident =
+    do vars <- obtainVarTable
+       let varname = getlabel varident
+           var = find ((== varname) . getVarName) vars
+       case var of
+         Just p -> return p
+         Nothing -> error $ "variable not found: " ++ varname
+
+
+-- | Define local variable
 registerLocalVar :: String -> Type -> Val -> Exec ()
 registerLocalVar vname vtype vvalue =
     do vt <- obtainVarTable
        modifyVarTable $ Var vname vtype vvalue : vt 
 
 
+-- | Define local variable with no value
 registerLocalUndefVar :: String -> Type -> Exec ()
 registerLocalUndefVar vname vtype =
     registerLocalVar vname vtype None
 
 
-runDef :: (Located SynDef) -> Exec ()
-runDef locdef = 
-    let tpIdents = getDefTypedIdents . ignorepos $ locdef
-        regvar tpIdent =
-            do tp <- findType $ ignorepos . getTypedIdentType $ tpIdent
-               let name = getlabel . ignorepos . getTypedIdentName $ tpIdent
-               registerLocalUndefVar name tp
-    in mapM_ regvar tpIdents
-
-
-evalExpr :: (Located SynExpr) -> Exec Val
-evalExpr locexpr = return $ IntVal 0
-
-
+-- | Change variable value by name
 changeVar :: String -> Val -> Exec ()
 changeVar vname val =
     do vt <- obtainVarTable
@@ -189,6 +238,63 @@ changeVar vname val =
           | otherwise = v : updateWhen cond vs value
 
 
+-- = Expressions
+
+-- | Execution to add two values
+addVal :: Val -> Val -> Exec Val
+addVal (IntVal i1) (IntVal i2) = return $ IntVal $ i1 + i2
+addVal (FloatVal f1) (FloatVal f2) = return $ FloatVal $ f1 + f2
+addVal _ _ = return $ None
+
+
+-- | Execution to multiply two values
+timesVal :: Val -> Val -> Exec Val
+timesVal (IntVal i1) (IntVal i2) = return $ IntVal $ i1 * i2
+timesVal _ _ = return $ None
+
+
+-- | Execution to run binary operation
+evalBin :: (Val -> Val -> Exec Val) -- ^ Value computation function
+        -> (Located SynExpr) -- ^ Left expression
+        -> (Located SynExpr) -- ^ Right expression
+        -> Exec Val
+evalBin f e1 e2 =
+    do v1 <- evalExpr e1
+       v2 <- evalExpr e2
+       f v1 v2
+
+
+-- | Execution to evaluate expression
+evalExpr :: (Located SynExpr) -> Exec Val
+evalExpr = eval . ignorepos
+    where eval :: SynExpr -> Exec Val
+
+          eval (SynLitIntExpr locint) =
+              return $ IntVal $ getint . ignorepos $ locint
+
+          eval (SynIdentExpr locident) =
+              do var <- findVar $ ignorepos locident
+                 return $ getVarValue var
+
+          eval (SynPlus e1 e2) = evalBin addVal e1 e2
+
+          eval (SynTimes e1 e2) = evalBin timesVal e1 e2
+
+
+-- = Statements
+
+-- | Definition execution
+runDef :: (Located SynDef) -> Exec ()
+runDef locdef = 
+    let tpIdents = getDefTypedIdents . ignorepos $ locdef
+        regvar tpIdent =
+            do tp <- findType $ ignorepos . getTypedIdentType $ tpIdent
+               let name = getlabel . ignorepos . getTypedIdentName $ tpIdent
+               registerLocalUndefVar name tp
+    in mapM_ regvar tpIdents
+
+
+-- | Attribution execution
 runAttr :: (Located SynAttr) -> Exec ()
 runAttr locattr =
     do let attr = ignorepos locattr
@@ -200,6 +306,8 @@ runAttr locattr =
        sequence_ $ zipWith changeVar names vals
        runStatus
 
+
+-- | Statement execution
 runStmt :: (Located SynStmt) -> Exec ()
 runStmt locstmt =
     do let stmt = ignorepos locstmt
@@ -208,25 +316,33 @@ runStmt locstmt =
          (SynStmtAttr locattr) -> runAttr locattr
          _ -> return ()
 
+
+-- | Block execution
 runBlock :: (Located SynBlock) -> Exec ()
 runBlock locblock =
     do let block = ignorepos locblock
        mapM_ runStmt $ getStmts block
 
+
+-- = Procedures
+
+-- | Procedure execution
 runProc :: SynProc -> Exec ()
 runProc p = do runPrintLn $ "starting procedure " ++ getProcName p
-               --runStatus
                runBlock $ getProcBlock p
                runPrintLn $ "ending procedure " ++ getProcName p
-               --runStatus
 
--------------------------------------------------
 
+-- = Module Execution
+
+-- | Register procedure into procedure table
 registerProc :: SynProc -> Exec ()
 registerProc p =
     do procs <- obtainProcTable
        modifyProcTable $ p : procs
 
+
+-- | Load global variables, procedures, functions ans structs
 loadModuleSymbols :: SynModule -> Exec ()
 loadModuleSymbols mod = mapM_ loadSymbol (modStmts mod)
     where
@@ -239,6 +355,7 @@ loadModuleSymbols mod = mapM_ loadSymbol (modStmts mod)
         loadSymbol (SynModStruct locstruct) = return ()
         
 
+-- | Module execution
 runmodule :: SynModule -> Exec ()
 runmodule m =
     do loadModuleSymbols m
