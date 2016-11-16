@@ -128,7 +128,9 @@ syndef = locate $
 -- == Simple attribution 
 
 -- | Syntactic construct for attribution 
-data SynAttr = SynAttr [Located SynIdent] [Located SynExpr] deriving (Show)
+data SynAttr = SynAttr { getAttrVars :: [Located SynIdent]
+                       , getAttrExprs :: [Located SynExpr]
+                       } deriving (Show)
 
 -- | SynParser for attribution
 synattr :: SynParser SynAttr
