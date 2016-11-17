@@ -17,7 +17,7 @@ data Val = IntVal Int
          | FloatVal Float
          | BoolVal Bool
          | None
-         deriving (Show)
+         deriving (Show, Eq)
 
 
 -- | Value type
@@ -26,7 +26,7 @@ data Type = IntType
           | BoolType
           | StructType String [(String, Type)]
           | ProcType [Type]
-          | FuncType [Type] [Type] deriving (Show)
+          | FuncType [Type] [Type] deriving (Show, Eq)
 
 
 -- | Variable

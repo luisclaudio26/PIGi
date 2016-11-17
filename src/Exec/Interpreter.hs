@@ -8,6 +8,37 @@ import PosParsec
 
 -- = Statements
 
+-- | Conditional execution
+
+-- | Auxiliar function to allow folding
+runIfPart :: Exec Bool 
+          -> (Located SynExpr, Located SynBlock)
+          -> Exec Bool
+runIfPart val (lexpr, lblock) =
+    do other <- val
+       if other == True
+       then return True
+       else do c <- evalExpr lexpr
+               if c == BoolVal True
+               then do runBlock lblock
+                       return True
+               else return False
+
+
+-- | if/else if/else structure execution
+runIf :: (Located SynIf) -> Exec ()
+runIf locif =
+    let ifx = ignorepos locif
+    in case ifx of
+         (SynIf xs xelse) ->
+             do done <- foldl runIfPart (return False) xs
+                if not done
+                then case xelse of
+                      Just xblock -> runBlock xblock
+                      Nothing -> return ()
+                else return ()
+
+
 -- | Definition execution
 runDef :: (Located SynDef) -> Exec ()
 runDef locdef = 
@@ -39,6 +70,7 @@ runStmt locstmt =
        case stmt of
          (SynStmtDef locdef) -> runDef locdef
          (SynStmtAttr locattr) -> runAttr locattr
+         (SynStmtIf locif) -> runIf locif
          _ -> return ()
 
 
