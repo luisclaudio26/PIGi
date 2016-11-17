@@ -20,7 +20,9 @@ runIfPart val (lexpr, lblock) =
        then return True
        else do c <- evalExpr lexpr
                if c == BoolVal True
-               then do runBlock lblock
+               then do raiseScope
+                       runBlock lblock
+                       dropScope
                        return True
                else return False
 
@@ -33,9 +35,12 @@ runIf locif =
          (SynIf xs xelse) ->
              do done <- foldl runIfPart (return False) xs
                 if not done
-                then case xelse of
-                      Just xblock -> runBlock xblock
-                      Nothing -> return ()
+                then case xelse of                      
+                       Just xblock ->
+                           do raiseScope
+                              runBlock xblock
+                              dropScope
+                       Nothing -> return ()
                 else return ()
 
 
