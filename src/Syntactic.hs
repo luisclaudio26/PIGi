@@ -65,6 +65,12 @@ data SynTypeList = SynTypeList { gettypelist :: [Located SynType] } deriving (Sh
 syntypelist :: SynSpecParser SynTypeList
 syntypelist = fmap SynTypeList (syntype `sepBy` (synlex LexComma))
 
+synttype :: SynParser SynIdentList
+synttype = locate $
+  do synlex LexLT
+     ttype <- fmap getidentlist synidentlist
+     synlex LexGT
+     return $ SynIdentList ttype
 
 -- | Syntactic construct for identifiers list
 data SynIdentList = SynIdentList { getidentlist :: [Located SynIdent] } deriving (Show)
@@ -287,19 +293,20 @@ collapseList [] = []
 collapseList (h:t) = h ++ (collapseList t)
 
 -- | Syntactic construct for 'struct'
-data SynStruct = SynStruct (Located SynIdent) [SynTypedIdent] deriving (Show)
+data SynStruct = SynStruct (Maybe (Located SynIdentList)) (Located SynIdent) [SynTypedIdent] deriving (Show)
 
 -- | SynParser for 'struct'
 synstruct :: SynParser SynStruct
 synstruct = locate $
   do synlex LexStruct
+     ttype <- fmap Just synttype <|> return Nothing
      name <- synident
      synlex LexAttr
      synlex LexLParen
      i <- fmap gettypedidentlist synTypedIdentList
      synlex LexRParen
      synlex LexSemicolon
-     return $ SynStruct name (collapseList i)
+     return $ SynStruct ttype name (collapseList i)
 
 
 -- | Syntactic construct for 'proc'
