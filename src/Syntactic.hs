@@ -535,8 +535,6 @@ synoptable = [ -- highest precedence
 synexpr :: SynParser SynExpr
 synexpr = buildExpressionParser synoptable synexprUnit
 
--- !! EVERYTHING BELOW THIS LINE IS WRONG !!
-
 -- | Syntactic constructs 
 -- | and SynParser for module
 data SynModStmt = SynModStruct (Located SynStruct)
@@ -560,6 +558,7 @@ synmodule :: SynParser SynModule
 synmodule = locate $
     do synlex LexModule
        moduleName <- synident
+       synlex LexSemicolon
        stmts <- many synModStmt
        eof
        return (SynModule moduleName stmts)
