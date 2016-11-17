@@ -190,12 +190,13 @@ findProc procname =
 
 -- == Struct table auxiliary functions
 
-findType :: SynIdent -> Exec Type
-findType (SynIdent i)
+findType :: SynType -> Exec Type
+findType (SynType locident)
   | i == "int" = return IntType
   | i == "float" = return FloatType
   | i == "bool" = return BoolType
   | otherwise = error $ "couldn't find type " ++ i
+  where i = getlabel . ignorepos $ locident
 
 
 -- == Variable table auxiliary functions

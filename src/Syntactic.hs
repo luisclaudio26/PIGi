@@ -44,6 +44,28 @@ synident = syntoken $
             (LexIdent s) -> Just (SynIdent s)
             _ -> Nothing
 
+-- | Syntactic construct for identifier
+data SynType = SynType { getTypeIdent :: (Located SynIdent) } 
+             | SynTypeGen deriving (Show)
+
+{--
+This aux function it's temporary. LUIS: FIX.
+--}
+getLabelFromType :: SynType -> String
+getLabelFromType t = getlabel . ignorepos . getTypeIdent $ t
+
+-- | SynParser 
+syntype:: SynParser SynType
+syntype = locate $
+  do name <- synident
+     return $ SynType name
+
+data SynTypeList = SynTypeList { gettypelist :: [Located SynType] } deriving (Show)
+
+syntypelist :: SynSpecParser SynTypeList
+syntypelist = fmap SynTypeList (syntype `sepBy` (synlex LexComma))
+
+
 -- | Syntactic construct for identifiers list
 data SynIdentList = SynIdentList { getidentlist :: [Located SynIdent] } deriving (Show)
 
@@ -53,12 +75,12 @@ synidentlist = fmap SynIdentList (synident `sepBy` (synlex LexComma))
 
 -- | Syntactic construct for typed identifier
 data SynTypedIdent = SynTypedIdent { getTypedIdentName :: (Located SynIdent)
-                                   , getTypedIdentType :: (Located SynIdent) } deriving (Show)
+                                   , getTypedIdentType :: (Located SynType) } deriving (Show)
 
 synSingleTypeIdentList :: SynSpecParser [SynTypedIdent]
 synSingleTypeIdentList = do var <- fmap getidentlist synidentlist
                             synlex LexColon
-                            vartype <- synident
+                            vartype <- syntype
                             let f t i = SynTypedIdent i t
                             return $ fmap (f vartype) var
 
@@ -262,13 +284,12 @@ synforp = locate $
      content <- synblock
      return $ SynForP i expr content
 
--- | Syntactic construct for 'struct'
-data SynStruct = SynStruct (Located SynIdent) [SynTypedIdent]
-               | SynStructmod (Located SynIdent) [Located SynIdent] [SynTypedIdent] deriving (Show)
-
 collapseList::[[SynTypedIdent]] -> [SynTypedIdent]
 collapseList [] = []
 collapseList (h:t) = h ++ (collapseList t)
+
+-- | Syntactic construct for 'struct'
+data SynStruct = SynStruct (Located SynIdent) [SynTypedIdent] deriving (Show)
 
 -- | SynParser for 'struct'
 synstruct :: SynParser SynStruct
@@ -282,20 +303,6 @@ synstruct = locate $
      synlex LexSemicolon
      return $ SynStruct name (collapseList i)
 
--- | SynParser for 'struct'
-synstructmod :: SynParser SynStruct
-synstructmod = locate $
-  do synlex LexStruct
-     synlex LexLT
-     temp <- fmap getidentlist synidentlist
-     synlex LexGT
-     name <- synident
-     synlex LexAttr
-     synlex LexLParen
-     i <- fmap gettypedidentlist synTypedIdentList
-     synlex LexRParen
-     synlex LexSemicolon
-     return $ SynStructmod name temp (collapseList i)
 
 -- | Syntactic construct for 'proc'
 data SynProc = SynProc { getProcIdent :: (Located SynIdent)
