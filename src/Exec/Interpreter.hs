@@ -1,4 +1,4 @@
-module Interpreter where
+module Exec.Interpreter where
 
 import Control.Monad (ap)
 import Data.List (find)

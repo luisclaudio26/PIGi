@@ -5,7 +5,7 @@ import Text.Parsec (parse)
 import PosParsec
 import Lexical
 import Syntactic
-import Interpreter
+import Exec.Interpreter
 import StaticAnalyzer
 
 runinterpreter :: SynModule -> IO ()
