@@ -216,8 +216,7 @@ data SynIf = SynIf [(Located SynExpr, Located SynBlock)]
 -- | SynParser for if/elseif/else structures
 synifstr :: SynParser SynIf
 synifstr = locate $
-    do synlex LexIf
-       cblock1 <- synif
+    do cblock1 <- synif
        cblocks <- many synelseif
        elseblock <- fmap Just synelse <|> return Nothing
        return $ SynIf (cblock1:cblocks) elseblock
@@ -233,8 +232,7 @@ synif = do synlex LexIf
 
 -- | SynParser for else if
 synelseif :: SynSpecParser (Located SynExpr, Located SynBlock)
-synelseif = do synlex LexElse
-               synlex LexIf
+synelseif = do try $ synlex LexElse >> synlex LexIf
                expr <- synexpr
                content <- synblock
                return (expr, content)
