@@ -5,6 +5,7 @@ import Text.Parsec (parse)
 import PosParsec
 import Lexical
 import Syntactic
+import Exec.Prim (newProgramState, execIO)
 import Exec.Interpreter
 import StaticAnalyzer
 
