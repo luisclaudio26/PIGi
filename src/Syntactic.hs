@@ -263,7 +263,8 @@ synforp = locate $
      return $ SynForP i expr content
 
 -- | Syntactic construct for 'struct'
-data SynStruct = SynStruct (Located SynIdent) [SynTypedIdent] deriving (Show)
+data SynStruct = SynStruct { getSynStructName :: Located SynIdent
+                           , getSynStructFields :: [SynTypedIdent] } deriving (Show)
 
 collapseList::[[SynTypedIdent]] -> [SynTypedIdent]
 collapseList [] = []

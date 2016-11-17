@@ -21,6 +21,27 @@ data STEntry = Variable { getVarId :: String    -- identifier
 
 type SymbolTable = [STEntry]
 
+
+data Field = Field { getFieldName :: String
+                   , getFieldType :: String } deriving (Show)
+
+data UTEntry = StructType { getStructName :: String     -- Type name
+                          , getStructFields :: [Field]  -- List of fields defined inside this struct
+                          , getStructMod :: String      -- module where it was defined       
+                          } 
+             | Primitive { getPrimName :: String } deriving (Show)
+
+
+{-
+typeTable :: UserTypeTable
+typeTable = [ Primitive "int",
+              Primitive "float",
+              Primitive "vec3",
+              StructType Ponto ...,
+              StructType Cachorro ... ] -}
+
+type UserTypeTable = [UTEntry]
+
 -- TODO: We should receive a SynProgram, which is
 -- itself a set of SynModules
 stFromModule :: SymbolTable -> SynModule -> SymbolTable 
@@ -39,7 +60,15 @@ stFromModStmt st id s = case s of
                             (SynModFunc func) -> stFromFunc st id (ignorepos func)
 
 stFromStruct :: SymbolTable -> String -> SynStruct -> SymbolTable
-stFromStruct st modid stct = st
+stFromStruct st modid stct = entry : st
+                                where entry = StructType (getlabel $ ignorepos $ getSynStructName stct)
+                                                          stFieldsFromTypedIdent stct
+                                                          modid
+
+stFieldsFromTypedIdent :: [SynTypedIdent] -> [Field]
+stFieldsFromTypedIdent [] = []
+stFieldsFromTypedIdent (h:t) = field : (stFieldsFromTypedIdent t)
+                                where field = 
 
 stFromDef :: SymbolTable -> String -> SynDef -> SymbolTable
 stFromDef st modid (SynDef typedId) = stFromTypedIdentList st modid typedId
