@@ -1,6 +1,8 @@
 ### Shortcut
 pigi
 
+.DS_Store
+
 # Files .pig
 *.pig
 
