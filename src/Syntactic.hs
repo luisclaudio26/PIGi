@@ -263,7 +263,8 @@ synforp = locate $
      return $ SynForP i expr content
 
 -- | Syntactic construct for 'struct'
-data SynStruct = SynStruct (Located SynIdent) [SynTypedIdent] deriving (Show)
+data SynStruct = SynStruct (Located SynIdent) [SynTypedIdent]
+               | SynStructmod (Located SynIdent) [Located SynIdent] [SynTypedIdent] deriving (Show)
 
 collapseList::[[SynTypedIdent]] -> [SynTypedIdent]
 collapseList [] = []
@@ -280,6 +281,21 @@ synstruct = locate $
      synlex LexRParen
      synlex LexSemicolon
      return $ SynStruct name (collapseList i)
+
+-- | SynParser for 'struct'
+synstructmod :: SynParser SynStruct
+synstructmod = locate $
+  do synlex LexStruct
+     synlex LexLT
+     temp <- fmap getidentlist synidentlist
+     synlex LexGT
+     name <- synident
+     synlex LexAttr
+     synlex LexLParen
+     i <- fmap gettypedidentlist synTypedIdentList
+     synlex LexRParen
+     synlex LexSemicolon
+     return $ SynStructmod name temp (collapseList i)
 
 -- | Syntactic construct for 'proc'
 data SynProc = SynProc { getProcIdent :: (Located SynIdent)
