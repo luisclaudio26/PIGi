@@ -17,7 +17,10 @@ data STEntry = Variable { getVarId :: String    -- identifier
                         , getVarMod :: String }  -- module where it was defined 
              | Function { getFuncName :: String
                         , getFuncType :: String
-                        , getFuncMod :: String } deriving (Show)
+                        , getFuncMod :: String } 
+             | Procedure { getProcName :: String
+                         , getProcType :: String
+                         , getProcMod :: String} deriving (Show)
 
 type SymbolTable = [STEntry]
 
@@ -45,7 +48,10 @@ stFromDef :: SymbolTable -> String -> SynDef -> SymbolTable
 stFromDef st modid (SynDef typedId) = stFromTypedIdentList st modid typedId
 
 stFromProc :: SymbolTable -> String -> SynProc -> SymbolTable
-stFromProc st modid proc = st
+stFromProc st modid (SynProc name formalParam block) = entry : st
+                                                            where entry = Procedure (getlabel $ ignorepos name)
+                                                                                   (buildProcTypeStr formalParam)
+                                                                                   modid
 
 stFromFunc :: SymbolTable -> String -> SynFunc -> SymbolTable
 stFromFunc st modid (SynFunc name formalParam ret block) = entry : st
@@ -57,6 +63,10 @@ buildFuncTypeStr formalParam ret = fp ++ "->" ++ rv
                                     where
                                         fp = show (getTypedIdentType `fmap` formalParam)
                                         rv = show (getTypedIdentType `fmap` ret)
+
+buildProcTypeStr :: [SynTypedIdent] -> String
+buildProcTypeStr formalParam = show (getTypedIdentType `fmap` formalParam)
+
 
 
 -- TODO: Code for entry is to big; maybe we could create some 
