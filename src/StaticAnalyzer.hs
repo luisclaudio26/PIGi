@@ -48,7 +48,7 @@ stFromProc :: SymbolTable -> String -> SynProc -> SymbolTable
 stFromProc st modid proc = st
 
 stFromFunc :: SymbolTable -> String -> SynFunc -> SymbolTable
-stFromFunc st modid (SynFunc name formalParam ret block) = entry : st
+stFromFunc st modid (SynFunc name ttype formalParam ret block) = entry : st
                                                             where entry = Function (getlabel $ ignorepos $ name)
                                                                                    (buildFuncTypeStr formalParam ret)
                                                                                     modid

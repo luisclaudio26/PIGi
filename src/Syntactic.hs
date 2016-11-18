@@ -331,6 +331,7 @@ getProcName p = getlabel . ignorepos . getProcIdent $ p
 
 -- | Syntactic construct for 'func'
 data SynFunc = SynFunc { getFuncName :: (Located SynIdent) 
+                       , getTempType :: (Maybe (Located SynIdentList))
                        , getFuncArgs :: [SynTypedIdent]  
                        , getFuncRet :: [SynTypedIdent]
                        , getFuncBlock :: (Located SynBlock) } deriving (Show)
@@ -339,6 +340,7 @@ data SynFunc = SynFunc { getFuncName :: (Located SynIdent)
 synfunc :: SynParser SynFunc
 synfunc = locate $
   do synlex LexFunc
+     ttype <- fmap Just synttype <|> return Nothing
      argsreturn <- fmap gettypedidentlist synTypedIdentList
      synlex LexAttr
      name <- synident
@@ -346,7 +348,7 @@ synfunc = locate $
      i <- fmap gettypedidentlist synTypedIdentList
      synlex LexRParen
      content <- synblock
-     return $ SynFunc name (collapseList i) (collapseList argsreturn) content
+     return $ SynFunc name ttype (collapseList i) (collapseList argsreturn) content
 
 -- | Syntactic construct for expression list
 data SynExprList = SynExprList { getexprlist :: [Located SynExpr] }
