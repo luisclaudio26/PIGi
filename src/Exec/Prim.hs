@@ -10,6 +10,7 @@ import PosParsec
 -- | Scope level
 data Scope = Global 
            | Local Int
+           deriving (Show, Eq)
 
 
 -- | Value
@@ -26,19 +27,28 @@ data Type = IntType
           | BoolType
           | StructType String [(String, Type)]
           | ProcType [Type]
-          | FuncType [Type] [Type] deriving (Show, Eq)
+          | FuncType [Type] [Type]
+          deriving (Show, Eq)
 
 
 -- | Variable
 data Var = Var { getVarName :: String 
                , getVarType :: Type
                , getVarValue :: Val
+               , getVarScope :: Scope
                } deriving (Show)
 
 
 -- | Update variable value
 setVarValue :: Var -> Val -> Var
-setVarValue var val = Var (getVarName var) (getVarType var) val
+setVarValue var val =
+    Var (getVarName var) (getVarType var) val (getVarScope var)
+
+
+-- | Update variable scope
+setVarScope :: Var -> Scope -> Var
+setVarScope var scope =
+    Var (getVarName var) (getVarType var) (getVarValue var) scope
 
 
 -- | Program State
@@ -216,13 +226,46 @@ findVar varident =
 registerLocalVar :: String -> Type -> Val -> Exec ()
 registerLocalVar vname vtype vvalue =
     do vt <- obtainVarTable
-       modifyVarTable $ Var vname vtype vvalue : vt 
+       modifyVarTable $ Var vname vtype vvalue (Local 0) : vt 
 
 
 -- | Define local variable with no value
 registerLocalUndefVar :: String -> Type -> Exec ()
 registerLocalUndefVar vname vtype =
-    registerLocalVar vname vtype None
+    registerLocalVar vname vtype None 
+
+
+-- | Increment scope level for local variables
+raiseScope :: Exec ()
+raiseScope =
+    do vt <- obtainVarTable
+       modifyVarTable $ foldl raise [] vt
+    where
+        raise vt var =
+            case getVarScope var of
+              (Local n) -> setVarScope var (Local $ n+1) : vt
+              _ -> var:vt
+
+
+-- | Decrement scope level for local variables
+dropScope :: Exec ()
+dropScope =
+    do vt <- obtainVarTable
+       modifyVarTable $ foldl drop [] vt
+    where
+        drop vt var =
+            case getVarScope var of
+              (Local 0) -> vt
+              (Local n) -> setVarScope var (Local $ n-1) : vt
+              _ -> var:vt
+
+
+-- | Return scope and clear local variables
+saveAndClearScope :: Exec [Var]
+saveAndClearScope =
+    do vt <- obtainVarTable
+       modifyVarTable $ filter ((== Global) . getVarScope) vt
+       return vt
 
 
 -- | Change variable value by name
