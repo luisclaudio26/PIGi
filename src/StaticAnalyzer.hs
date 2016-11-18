@@ -30,8 +30,7 @@ data Field = Field { getFieldName :: String
 
 data UTEntry = StructType { getStructName :: String     -- Type name
                           , getStructFields :: [Field]  -- List of fields defined inside this struct
-                          , getStructMod :: String      -- module where it was defined       
-                          } 
+                          , getStructMod :: String }     -- module where it was defined
              | Primitive { getPrimName :: String } deriving (Show)
 
 
@@ -50,28 +49,29 @@ type UserTypeTable = [UTEntry]
 stFromModule :: SymbolTable -> SynModule -> SymbolTable 
 stFromModule st ( SynModule id stmts ) = stFromModStmts st (getlabel $ ignorepos id) stmts 
 
-stFromModStmts :: SymbolTable -> String -> [SynModStmt] -> SymbolTable
+stFromModStmts :: Either .. SymbolTable -> String -> [SynModStmt] -> Either ... SymbolTable
 stFromModStmts st id [] = st
 stFromModStmts st id (h:t) = stFromModStmts newSt id t
                                 where newSt = stFromModStmt st id h
 
-stFromModStmt :: SymbolTable -> String -> SynModStmt -> SymbolTable
+stFromModStmt :: SymbolTable -> String -> SynModStmt -> Either .. SymbolTable
 stFromModStmt st id s = case s of
                             (SynModStruct stct) -> stFromStruct st id (ignorepos stct)
                             (SynModDef def) -> stFromDef st id (ignorepos def)
                             (SynModProc proc) -> stFromProc st id (ignorepos proc)
                             (SynModFunc func) -> stFromFunc st id (ignorepos func)
 
-stFromStruct :: SymbolTable -> String -> SynStruct -> SymbolTable
-stFromStruct st modid stct = entry : st
+stFromStruct :: UserTypeTable -> String -> SynStruct -> UserTypeTable
+stFromStruct tt modid stct = entry : tt
                                 where entry = StructType (getlabel $ ignorepos $ getSynStructName stct)
-                                                          stFieldsFromTypedIdent stct
+                                                         (stFieldsFromTypedIdent stct)
                                                           modid
 
 stFieldsFromTypedIdent :: [SynTypedIdent] -> [Field]
 stFieldsFromTypedIdent [] = []
 stFieldsFromTypedIdent (h:t) = field : (stFieldsFromTypedIdent t)
-                                where field = 
+                                where field = Field (getlabel $ ignorepos getTypedIdentName h)
+                                                    (getTypedIdentType h)
 
 stFromDef :: SymbolTable -> String -> SynDef -> SymbolTable
 stFromDef st modid (SynDef typedId) = stFromTypedIdentList st modid typedId
