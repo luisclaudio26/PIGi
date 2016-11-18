@@ -34,56 +34,70 @@ data UTEntry = StructType { getStructName :: String     -- Type name
              | Primitive { getPrimName :: String } deriving (Show)
 
 
-{-
+
 typeTable :: UserTypeTable
-typeTable = [ Primitive "int",
-              Primitive "float",
-              Primitive "vec3",
-              StructType Ponto ...,
-              StructType Cachorro ... ] -}
+typeTable = [ Primitive "int"
+            , Primitive "float"
+            , Primitive "bool"
+            , Primitive "vec"
+            , Primitive "vec2"
+            , Primitive "vec3"
+            , Primitive "vec4"
+            , Primitive "mat"
+            , Primitive "mat2"
+            , Primitive "mat3"
+            , Primitive "mat4"]
 
 type UserTypeTable = [UTEntry]
 
 -- TODO: We should receive a SynProgram, which is
 -- itself a set of SynModules
-stFromModule :: SymbolTable -> SynModule -> SymbolTable 
+stFromModule :: SymbolTable -> SynModule -> Either String SymbolTable 
 stFromModule st ( SynModule id stmts ) = stFromModStmts st (getlabel $ ignorepos id) stmts 
 
-stFromModStmts :: Either .. SymbolTable -> String -> [SynModStmt] -> Either ... SymbolTable
-stFromModStmts st id [] = st
-stFromModStmts st id (h:t) = stFromModStmts newSt id t
-                                where newSt = stFromModStmt st id h
+stFromModStmts :: SymbolTable -> String -> [SynModStmt] -> Either String SymbolTable
+stFromModStmts st id [] = Right st
+stFromModStmts st id (h:t) = let result = stFromModStmt st id h in
+                             case result of
+                                Left errorMsg  -> Left errorMsg
+                                Right newSt -> stFromModStmts newSt id t
 
-stFromModStmt :: SymbolTable -> String -> SynModStmt -> Either .. SymbolTable
+
+stFromModStmt :: SymbolTable -> String -> SynModStmt -> Either String SymbolTable
 stFromModStmt st id s = case s of
                             (SynModStruct stct) -> stFromStruct st id (ignorepos stct)
                             (SynModDef def) -> stFromDef st id (ignorepos def)
                             (SynModProc proc) -> stFromProc st id (ignorepos proc)
                             (SynModFunc func) -> stFromFunc st id (ignorepos func)
 
-stFromStruct :: UserTypeTable -> String -> SynStruct -> UserTypeTable
-stFromStruct tt modid stct = entry : tt
-                                where entry = StructType (getlabel $ ignorepos $ getSynStructName stct)
-                                                         (stFieldsFromTypedIdent stct)
-                                                          modid
 
+stFromStruct :: SymbolTable -> String -> SynStruct -> Either String SymbolTable 
+stFromStruct st modid stct = Right st
+{-
+stFromStruct st modid stct = Right $ entry : st
+                                where entry = StructType (getlabel $ ignorepos $ getSynStructName stct)
+                                                          (stFieldsFromTypedIdent stct)
+                                                          modid -}
+
+{-
 stFieldsFromTypedIdent :: [SynTypedIdent] -> [Field]
 stFieldsFromTypedIdent [] = []
 stFieldsFromTypedIdent (h:t) = field : (stFieldsFromTypedIdent t)
                                 where field = Field (getlabel $ ignorepos getTypedIdentName h)
                                                     (getTypedIdentType h)
+-}
 
-stFromDef :: SymbolTable -> String -> SynDef -> SymbolTable
-stFromDef st modid (SynDef typedId) = stFromTypedIdentList st modid typedId
+stFromDef :: SymbolTable -> String -> SynDef -> Either String SymbolTable
+stFromDef st modid (SynDef typedId) = Right $ stFromTypedIdentList st modid typedId
 
-stFromProc :: SymbolTable -> String -> SynProc -> SymbolTable
-stFromProc st modid (SynProc name formalParam block) = entry : st
+stFromProc :: SymbolTable -> String -> SynProc -> Either String SymbolTable
+stFromProc st modid (SynProc name formalParam block) = Right $ entry : st
                                                             where entry = Procedure (getlabel $ ignorepos name)
                                                                                    (buildProcTypeStr formalParam)
                                                                                    modid
 
-stFromFunc :: SymbolTable -> String -> SynFunc -> SymbolTable
-stFromFunc st modid (SynFunc name formalParam ret block) = entry : st
+stFromFunc :: SymbolTable -> String -> SynFunc -> Either String SymbolTable
+stFromFunc st modid (SynFunc name formalParam ret block) = Right $ entry : st
                                                             where entry = Function (getlabel $ ignorepos $ name)
                                                                                    (buildFuncTypeStr formalParam ret)
                                                                                     modid
