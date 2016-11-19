@@ -24,7 +24,6 @@ data STEntry = Variable { getVarId :: String    -- identifier
 
 type SymbolTable = [STEntry]
 
-
 data Field = Field { getFieldName :: String
                    , getFieldType :: String } deriving (Show)
 
@@ -32,8 +31,6 @@ data UTEntry = StructType { getStructName :: String     -- Type name
                           , getStructFields :: [Field]  -- List of fields defined inside this struct
                           , getStructMod :: String }     -- module where it was defined
              | Primitive { getPrimName :: String } deriving (Show)
-
-
 
 typeTable :: UserTypeTable
 typeTable = [ Primitive "int"
@@ -50,12 +47,14 @@ typeTable = [ Primitive "int"
 
 type UserTypeTable = [UTEntry]
 
+type SuperTable = (SymbolTable, UserTypeTable)
+
 -- TODO: We should receive a SynProgram, which is
 -- itself a set of SynModules
-stFromModule :: SymbolTable -> SynModule -> Either String SymbolTable 
+stFromModule :: SuperTable -> SynModule -> Either String SuperTable 
 stFromModule st ( SynModule id stmts ) = stFromModStmts st (getlabel $ ignorepos id) stmts 
 
-stFromModStmts :: SymbolTable -> String -> [SynModStmt] -> Either String SymbolTable
+stFromModStmts :: SuperTable -> String -> [SynModStmt] -> Either String SuperTable
 stFromModStmts st id [] = Right st
 stFromModStmts st id (h:t) = let result = stFromModStmt st id h in
                              case result of
@@ -63,7 +62,7 @@ stFromModStmts st id (h:t) = let result = stFromModStmt st id h in
                                 Right newSt -> stFromModStmts newSt id t
 
 
-stFromModStmt :: SymbolTable -> String -> SynModStmt -> Either String SymbolTable
+stFromModStmt :: SuperTable -> String -> SynModStmt -> Either String SuperTable
 stFromModStmt st id s = case s of
                             (SynModStruct stct) -> stFromStruct st id (ignorepos stct)
                             (SynModDef def) -> stFromDef st id (ignorepos def)
@@ -71,7 +70,7 @@ stFromModStmt st id s = case s of
                             (SynModFunc func) -> stFromFunc st id (ignorepos func)
 
 
-stFromStruct :: SymbolTable -> String -> SynStruct -> Either String SymbolTable 
+stFromStruct :: SuperTable -> String -> SynStruct -> Either String SuperTable 
 stFromStruct st modid stct = Right st
 {-
 stFromStruct st modid stct = Right $ entry : st
@@ -87,20 +86,27 @@ stFieldsFromTypedIdent (h:t) = field : (stFieldsFromTypedIdent t)
                                                     (getTypedIdentType h)
 -}
 
-stFromDef :: SymbolTable -> String -> SynDef -> Either String SymbolTable
-stFromDef st modid (SynDef typedId) = Right $ stFromTypedIdentList st modid typedId
+stFromDef :: SuperTable -> String -> SynDef -> Either String SuperTable
+stFromDef st modid (SynDef typedId) = stFromTypedIdentList st modid typedId
 
-stFromProc :: SymbolTable -> String -> SynProc -> Either String SymbolTable
-stFromProc st modid (SynProc name formalParam block) = Right $ entry : st
-                                                            where entry = Procedure (getlabel $ ignorepos name)
-                                                                                   (buildProcTypeStr formalParam)
-                                                                                   modid
+stFromProc :: SuperTable -> String -> SynProc -> Either String SuperTable
+stFromProc st modid (SynProc name formalParam block) = if isElemUserTypeTable (getlabel $ ignorepos name) (snd st)
+                                                            then Left "Name already being used as a type name."
+                                                            else Right (syt, (snd st))
+                                                                where syt = entry : (fst st)
+                                                                      entry = Procedure (getlabel $ ignorepos name)
+                                                                                        (buildProcTypeStr formalParam)
+                                                                                        modid  
 
-stFromFunc :: SymbolTable -> String -> SynFunc -> Either String SymbolTable
-stFromFunc st modid (SynFunc name formalParam ret block) = Right $ entry : st
-                                                            where entry = Function (getlabel $ ignorepos $ name)
-                                                                                   (buildFuncTypeStr formalParam ret)
-                                                                                    modid
+stFromFunc :: SuperTable -> String -> SynFunc -> Either String SuperTable
+stFromFunc st modid (SynFunc name formalParam ret block) = if isElemUserTypeTable (getlabel $ ignorepos name) (snd st)
+                                                                then Left "Name already being used as a type name."
+                                                                else Right (syt, (snd st))
+                                                                        where syt = entry : (fst st)
+                                                                              entry = Function (getlabel $ ignorepos name)
+                                                                                               (buildFuncTypeStr formalParam ret)
+                                                                                               modid
+
 buildFuncTypeStr :: [SynTypedIdent] -> [SynTypedIdent] -> String
 buildFuncTypeStr formalParam ret = fp ++ "->" ++ rv
                                     where
@@ -114,13 +120,25 @@ buildProcTypeStr formalParam = show (getTypedIdentType `fmap` formalParam)
 
 -- TODO: Code for entry is to big; maybe we could create some 
 -- helper functions to make it smaller.
-stFromTypedIdentList :: SymbolTable -> String -> [SynTypedIdent] -> SymbolTable
-stFromTypedIdentList st modid [] = st
-stFromTypedIdentList st modid (h:t) = stFromTypedIdentList newST modid t
-                                        where newST = entry : st
-                                              entry = Variable (getlabel $ ignorepos $ getTypedIdentName h) 
-                                                               (getlabel $ ignorepos $ getTypedIdentType h) 
-                                                                modid 
+stFromTypedIdentList :: SuperTable -> String -> [SynTypedIdent] -> Either String SuperTable
+stFromTypedIdentList st modid [] = Right st
+stFromTypedIdentList st modid (h:t) = if isElemUserTypeTable (getlabel $ ignorepos $ getTypedIdentName h) (snd st)
+                                        then Left "Name already being used as a type name." 
+                                        else stFromTypedIdentList (newST, snd st) modid t
+                                                where newST = entry : (fst st)
+                                                      entry = Variable (getlabel $ ignorepos $ getTypedIdentName h) 
+                                                                       (getlabel $ ignorepos $ getTypedIdentType h) 
+                                                                       modid 
+
+isElemUserTypeTable :: String -> [UTEntry] -> Bool
+isElemUserTypeTable s [] = False
+isElemUserTypeTable s (h:t) = case h of 
+                                StructType name _ _ -> if name == s 
+                                                        then True
+                                                        else isElemUserTypeTable s t 
+                                Primitive name -> if name == s
+                                                    then True
+                                                    else isElemUserTypeTable s t
 
 -----------------------------------------------
 --------- Static analyzer for modules --------- TODO: Move this to another file when 
@@ -146,4 +164,4 @@ semModuleRules = [modDummyRule]
 -- used, Left X indicates something went wrong and X carries an error
 -- message.
 modDummyRule :: SynModule -> Either String SynModule       -- Dummy rule for tests only
-modDummyRule mod = Left $ show (stFromModule [] mod)
+modDummyRule mod = Left $ show (stFromModule ([],typeTable) mod)
