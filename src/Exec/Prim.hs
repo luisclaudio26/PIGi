@@ -201,7 +201,7 @@ findProc procname =
 -- == Struct table auxiliary functions
 
 findType :: SynType -> Exec Type
-findType (SynType locident)
+findType (SynType locident args)
   | i == "int" = return IntType
   | i == "float" = return FloatType
   | i == "bool" = return BoolType
