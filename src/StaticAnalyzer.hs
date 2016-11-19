@@ -70,13 +70,16 @@ stFromModStmt st id s = case s of
                             (SynModFunc func) -> stFromFunc st id (ignorepos func)
 
 
+-- TODO: We can still define a struct with a name that was already used by
+-- a variable. Check that after!
 stFromStruct :: SuperTable -> String -> SynStruct -> Either String SuperTable 
-stFromStruct st modid stct = Right st
-{-
-stFromStruct st modid stct = Right $ entry : st
-                                where entry = StructType (getlabel $ ignorepos $ getSynStructName stct)
-                                                          (stFieldsFromTypedIdent stct)
-                                                          modid -}
+stFromStruct st modid stct = Right $ newSt
+                                where 
+                                    newSt = (fst st, newTypeTable)
+                                    newTypeTable = newEntry : (snd st)
+                                    newEntry = StructType (getlabel $ ignorepos $ getSynStructName stct)
+                                                          ([])
+                                                           modid
 
 {-
 stFieldsFromTypedIdent :: [SynTypedIdent] -> [Field]
