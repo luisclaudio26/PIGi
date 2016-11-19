@@ -92,6 +92,7 @@ runStmt locstmt =
          (SynStmtAttr locattr) -> runAttr locattr
          (SynStmtIf locif) -> runIf locif
          (SynStmtWhile locwhile) -> runWhile locwhile
+         (SynStmtCall loccall) -> callProc loccall
          _ -> return ()
 
 
@@ -109,6 +110,24 @@ runProc :: SynProc -> Exec ()
 runProc p = do runPrintLn $ "starting procedure " ++ getProcName p
                runBlock $ getProcBlock p
                runPrintLn $ "ending procedure " ++ getProcName p
+
+
+-- | Procedure call
+callProc :: Located SynCall -> Exec ()
+callProc loccall =
+    let call = ignorepos loccall
+        regVar :: SynTypedIdent -> Val -> Exec ()
+        regVar tid val =
+            do let vname = getlabel . ignorepos . getTypedIdentName $ tid
+               vtype <- findType . ignorepos . getTypedIdentType $ tid
+               registerLocalVar vname vtype val
+
+     in do vargs <- mapM evalExpr (getexprlist . getArgList $ call)
+           vt <- saveAndClearScope
+           proc <- findProc (getlabel . ignorepos . getFuncId $ call) 
+           sequence_ $ zipWith regVar (getProcArgs proc) vargs
+           runProc proc
+           modifyVarTable vt
 
 
 -- = Module Execution
