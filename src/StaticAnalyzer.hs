@@ -93,8 +93,9 @@ stFromDef :: SuperTable -> String -> SynDef -> Either String SuperTable
 stFromDef st modid (SynDef typedId) = stFromTypedIdentList st modid typedId
 
 stFromProc :: SuperTable -> String -> SynProc -> Either String SuperTable
-stFromProc st modid (SynProc name formalParam block) = if isElemUserTypeTable (getlabel $ ignorepos name) (snd st)
-                                                            then Left "Name already being used as a type name."
+stFromProc st modid (SynProc name formalParam block) = let n = getlabel $ ignorepos name in
+                                                          if isElemUserTypeTable n (snd st) || isElemSymbolTable n (fst st)
+                                                            then Left "Name already being used as a type name or variable name."
                                                             else Right (syt, (snd st))
                                                                 where syt = entry : (fst st)
                                                                       entry = Procedure (getlabel $ ignorepos name)
@@ -102,8 +103,9 @@ stFromProc st modid (SynProc name formalParam block) = if isElemUserTypeTable (g
                                                                                         modid  
 
 stFromFunc :: SuperTable -> String -> SynFunc -> Either String SuperTable
-stFromFunc st modid (SynFunc name formalParam ret block) = if isElemUserTypeTable (getlabel $ ignorepos name) (snd st)
-                                                                then Left "Name already being used as a type name."
+stFromFunc st modid (SynFunc name formalParam ret block) = let n = getlabel $ ignorepos name in
+                                                              if isElemUserTypeTable n (snd st) || isElemSymbolTable n (fst st)
+                                                                then Left "Name already being used as a type name or variable name."
                                                                 else Right (syt, (snd st))
                                                                         where syt = entry : (fst st)
                                                                               entry = Function (getlabel $ ignorepos name)
@@ -125,13 +127,14 @@ buildProcTypeStr formalParam = show (getTypedIdentType `fmap` formalParam)
 -- helper functions to make it smaller.
 stFromTypedIdentList :: SuperTable -> String -> [SynTypedIdent] -> Either String SuperTable
 stFromTypedIdentList st modid [] = Right st
-stFromTypedIdentList st modid (h:t) = if isElemUserTypeTable (getlabel $ ignorepos $ getTypedIdentName h) (snd st)
-                                        then Left "Name already being used as a type name." 
-                                        else stFromTypedIdentList (newST, snd st) modid t
-                                                where newST = entry : (fst st)
-                                                      entry = Variable (getlabel $ ignorepos $ getTypedIdentName h) 
-                                                                       (getlabel $ ignorepos $ getTypedIdentType h) 
-                                                                       modid 
+stFromTypedIdentList st modid (h:t) = let name = getlabel $ ignorepos $ getTypedIdentName h in
+                                        if isElemUserTypeTable name (snd st) || isElemSymbolTable name (fst st)
+                                            then Left "Name already being used as a type name or variable name." 
+                                            else stFromTypedIdentList (newST, snd st) modid t
+                                                  where newST = entry : (fst st)
+                                                        entry = Variable (getlabel $ ignorepos $ getTypedIdentName h) 
+                                                                         (getlabel $ ignorepos $ getTypedIdentType h) 
+                                                                         modid 
 
 isElemUserTypeTable :: String -> [UTEntry] -> Bool
 isElemUserTypeTable s [] = False
@@ -142,6 +145,19 @@ isElemUserTypeTable s (h:t) = case h of
                                 Primitive name -> if name == s
                                                     then True
                                                     else isElemUserTypeTable s t
+
+isElemSymbolTable :: String -> [STEntry] -> Bool
+isElemSymbolTable s [] = False
+isElemSymbolTable s (h:t) = case h of 
+                                Variable name _ _ -> if name == s 
+                                                        then True
+                                                        else isElemSymbolTable s t 
+                                Function name _ _ -> if name == s
+                                                        then True
+                                                        else isElemSymbolTable s t
+                                Procedure name _ _ -> if name == s
+                                                        then True
+                                                        else isElemSymbolTable s t
 
 -----------------------------------------------
 --------- Static analyzer for modules --------- TODO: Move this to another file when 
