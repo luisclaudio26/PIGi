@@ -44,6 +44,21 @@ runIf locif =
                 else return ()
 
 
+-- | while block execution
+runWhile :: (Located SynWhile) -> Exec ()
+runWhile locwhile =
+    let while = ignorepos locwhile
+        runRecWhile cond block = 
+            do v <- evalExpr cond
+               if v == BoolVal True
+               then runBlock block >> runRecWhile cond block
+               else return ()
+    in do
+        raiseScope
+        runRecWhile (getWhileCondition while) (getWhileBlock while)
+        dropScope
+
+
 -- | Definition execution
 runDef :: (Located SynDef) -> Exec ()
 runDef locdef = 
@@ -76,6 +91,7 @@ runStmt locstmt =
          (SynStmtDef locdef) -> runDef locdef
          (SynStmtAttr locattr) -> runAttr locattr
          (SynStmtIf locif) -> runIf locif
+         (SynStmtWhile locwhile) -> runWhile locwhile
          _ -> return ()
 
 

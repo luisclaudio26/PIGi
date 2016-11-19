@@ -161,15 +161,20 @@ data SynStmt = SynStmtDef (Located SynDef)
              | SynStmtAttr (Located SynAttr)
              | SynStmtDefAttr (Located SynDefAttr)
              | SynStmtIf (Located SynIf)
+             | SynStmtWhile (Located SynWhile)
 
 instance Show SynStmt where
     show (SynStmtDef  x) = show x ++ "\n"
     show (SynStmtAttr x) = show x ++ "\n"
+    show (SynStmtIf x) = show x ++ "\n"
+    show (SynStmtWhile x) = show x ++ "\n"
+
 
 synstmt :: SynParser SynStmt
 synstmt = locate $ fmap SynStmtDef syndef 
                <|> fmap SynStmtAttr synattr
                <|> fmap SynStmtIf synifstr 
+               <|> fmap SynStmtWhile synwhile
 
 -- | Syntactic construct for block
 data SynBlock = SynBlock { getStmts :: [Located SynStmt] } deriving (Show)
@@ -225,7 +230,9 @@ synelse = do synlex LexElse
 -- == while
 
 -- | Syntactic construct for 'while'
-data SynWhile = SynWhile (Located SynExpr) (Located SynBlock) deriving (Show)
+data SynWhile = SynWhile { getWhileCondition :: (Located SynExpr)
+                         , getWhileBlock :: (Located SynBlock)
+                         } deriving (Show)
 
 -- | SynParser for while
 synwhile :: SynParser SynWhile
