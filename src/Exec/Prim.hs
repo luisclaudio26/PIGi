@@ -4,6 +4,7 @@ import Control.Monad
 import Data.List (find)
 import Syntactic
 import PosParsec
+import Types
 
 -- = Program State
 
@@ -21,14 +22,11 @@ data Val = IntVal Int
          deriving (Show, Eq)
 
 
--- | Value type
-data Type = IntType
-          | FloatType
-          | BoolType
-          | StructType String [(String, Type)]
-          | ProcType [Type]
-          | FuncType [Type] [Type]
-          deriving (Show, Eq)
+instance Typed Val where
+    toType (IntVal _) = IntType
+    toType (FloatVal _) = FloatType
+    toType (BoolVal _) = BoolType
+    toType None = NoneType
 
 
 -- | Variable
@@ -37,6 +35,36 @@ data Var = Var { getVarName :: String
                , getVarValue :: Val
                , getVarScope :: Scope
                } deriving (Show)
+
+
+instance Typed Var where
+    toType = getVarType
+
+
+-- | PIG Procedure
+data Proc = NativeProc Name Type ([Val] -> Exec ())
+          | Proc SynProc
+
+instance Typed Proc where
+    toType (NativeProc _ t _) = t
+    toType (Proc sproc) = toType sproc
+
+instance Named Proc where
+    getName (NativeProc n _ _) = n
+    getName (Proc sproc) = getName sproc
+
+
+-- | PIG Function
+data Func = NativeFunc Name Type ([Val] -> Exec [Val])
+          | Func SynFunc
+
+instance Typed Func where
+    toType (NativeFunc _ t _) = t
+    toType (Func sfunc) = toType sfunc
+
+instance Named Func where
+    getName (NativeFunc n _ _) = n
+    getName (Func sfunc) = getName sfunc
 
 
 -- | Update variable value
@@ -51,12 +79,15 @@ setVarScope var scope =
     Var (getVarName var) (getVarType var) (getVarValue var) scope
 
 
+type ProcTable = [Proc]
+type FuncTable = [Func]
+
 -- | Program State
 data ProgramState =
     State { getVarTable :: [Var] -- ^ Variable table
           , getStructTable :: [Type] -- ^ Struct table
-          , getProcTable :: [SynProc] -- ^ Procedure table
-          , getFuncTable :: [SynFunc] -- ^ Function table
+          , getProcTable :: ProcTable -- ^ Procedure table
+          , getFuncTable :: FuncTable -- ^ Function table
           }
 
 
@@ -157,12 +188,12 @@ obtainStructTable = mkEval $ return . getStructTable
 
 
 -- | Get current procedure table
-obtainProcTable :: Exec [SynProc]
+obtainProcTable :: Exec ProcTable
 obtainProcTable = mkEval $ return . getProcTable
 
 
 -- | Set current procedure table
-modifyProcTable :: [SynProc] -> Exec ()
+modifyProcTable :: ProcTable -> Exec ()
 modifyProcTable pt = mkExec $
     \state -> let vt = getVarTable state
                   st = getStructTable state
@@ -171,12 +202,12 @@ modifyProcTable pt = mkExec $
 
 
 -- | Get current function table
-obtainFuncTable :: Exec [SynFunc]
+obtainFuncTable :: Exec FuncTable
 obtainFuncTable = mkEval $ return . getFuncTable
 
 
 -- | Set current procedure table
-modifyFuncTable :: [SynFunc] -> Exec ()
+modifyFuncTable :: FuncTable -> Exec ()
 modifyFuncTable ft = mkExec $
     \state -> let vt = getVarTable state
                   st = getStructTable state
@@ -205,17 +236,19 @@ runStatus =
 
 -- == Procedure table auxiliary functions
 
-findProc :: String -> Exec SynProc
-findProc procname =
+findProc :: String -> Type -> Exec Proc
+findProc procname proctype =
     do procs <- obtainProcTable
-       let proc = find (\p -> getProcName p == procname) procs
+       let matchname = (==procname) . getName
+           matchtype = (==proctype) . toType
+           proc = find (\s -> matchname s && matchtype s) procs
        case proc of
          Just p -> return p
          Nothing -> error $ "couldn't find procedure " ++ procname
 
 
 -- | Register procedure into procedure table
-registerProc :: SynProc -> Exec ()
+registerProc :: Proc -> Exec ()
 registerProc p =
     do procs <- obtainProcTable
        modifyProcTable $ p : procs
@@ -223,17 +256,19 @@ registerProc p =
 
 -- == Function table auxiliary functions
 
-findFunc :: String -> Exec SynFunc
-findFunc funcname =
+findFunc :: String -> [Type] -> Exec Func
+findFunc funcname argtypes =
     do funcs <- obtainFuncTable
-       let func = find ((==funcname) . getFuncName) funcs
+       let matchname = (==funcname) . getName
+           matchtype = (funcSim $ FuncType [] argtypes) . toType
+           func = find (\f -> matchname f && matchtype f) funcs
        case func of
          Just d -> return d
          Nothing -> error $ "couldn't find function " ++ funcname
 
 
 -- | Register function into function table
-registerFunc :: SynFunc -> Exec ()
+registerFunc :: Func -> Exec ()
 registerFunc f =
     do funcs <- obtainFuncTable
        modifyFuncTable $ f : funcs

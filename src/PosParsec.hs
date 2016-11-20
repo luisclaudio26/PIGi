@@ -2,11 +2,18 @@ module PosParsec where
 
 import Text.Parsec.Prim 
 import Text.Parsec.Pos
+import Types
 
 newtype Located a = Located (SourcePos, a) 
 
 instance (Show a) => Show (Located a) where
     show loc = show $ ignorepos loc
+
+instance (Typed a) => Typed (Located a) where
+    toType loc = toType $ ignorepos loc
+
+instance (Named a) => Named (Located a) where
+    getName loc = getName $ ignorepos loc
 
 -- | Remove position from located
 ignorepos :: Located a -> a

@@ -2,6 +2,8 @@ module Exec.Interpreter where
 
 import Exec.Prim
 import Exec.Expr
+import Exec.Native
+import Types
 import Syntactic
 import PosParsec
 
@@ -213,11 +215,11 @@ registerRets rets =
 
 -- == Procedures
 
--- | Procedure execution
-runProc :: SynProc -> Exec ()
-runProc p = do runPrintLn $ "starting procedure " ++ getProcName p
-               runBlock $ getProcBlock p
-               runPrintLn $ "ending procedure " ++ getProcName p
+-- | Execute procedure
+-- No preparation is made by this function
+runProc :: Proc -> Exec ()
+runProc (NativeProc _ _ x) = x []
+runProc (Proc p) = runBlock $ getProcBlock p
 
 
 -- | Procedure call
@@ -226,19 +228,17 @@ callProc loccall =
     let call = ignorepos loccall
      in do argValues <- mapM evalExpr (getexprlist . getArgList $ call)
            vt <- saveAndClearScope
-           proc <- findProc (getlabel . ignorepos . getFuncId $ call) 
-           registerArgs (getProcArgs proc) argValues
-           runProc proc
+           let pname = getName . getFuncId $ call
+               ptype = ProcType $ toTypeList argValues
+           proc <- findProc pname ptype
+           case proc of
+             (NativeProc _ _ x) -> x argValues
+             (Proc sp) -> do registerArgs (getProcArgs sp) argValues
+                             runBlock $ getProcBlock sp
            modifyVarTable vt
 
 
 -- = Functions
-
--- | Function execution
-runFunc :: SynFunc -> Exec ()
-runFunc f = do runPrintLn $ "starting function " ++ getFuncName f
-               runBlock $ getFuncBlock f
-               runPrintLn $ "ending function " ++ getFuncName f
 
 
 -- | Function call
@@ -247,19 +247,28 @@ callFunc loccall =
     let call = ignorepos loccall
      in do argValues <- mapM evalExpr (getexprlist . getArgList $ call)
            vt <- saveAndClearScope
-           func <- findFunc (getlabel . ignorepos . getFuncId $ call) 
-           registerArgs (getFuncArgs func) argValues
-           registerRets (getFuncRet func) 
-           runFunc func
-           let getName = getlabel . ignorepos . getTypedIdentName
-               retNames = map getName (getFuncRet func)
-               extrVal vname = fmap getVarValue $ findVar vname
-           rets <- mapM extrVal retNames
+           let argTypes = toTypeList argValues
+               fname = getName . getFuncId $ call
+           func <- findFunc fname argTypes
+           rets <- case func of
+             (NativeFunc _ _ x) ->
+                 x argValues 
+             (Func sf) -> do
+                 registerArgs (getFuncArgs sf) argValues
+                 registerRets (getFuncRet sf) 
+                 runBlock $ getFuncBlock sf
+                 let retNames = map getName $ getFuncRet sf
+                     extrVal vname = fmap getVarValue $ findVar vname
+                 mapM extrVal retNames
            modifyVarTable vt
            return rets
 
 
 -- = Module Execution
+
+-- | Load builtin procedures and functions
+loadNativeSymbols :: Exec ()
+loadNativeSymbols = mapM_ registerProc nativeProcs
 
 -- | Load global variables, procedures, functions ans structs
 loadModuleSymbols :: SynModule -> Exec ()
@@ -268,10 +277,10 @@ loadModuleSymbols mod = mapM_ loadSymbol (modStmts mod)
         loadSymbol (SynModDef locdef) = return ()
 
         loadSymbol (SynModProc locproc) =
-            registerProc $ ignorepos locproc
+            registerProc $ Proc $ ignorepos locproc
 
         loadSymbol (SynModFunc locfunc) = 
-            registerFunc $ ignorepos locfunc
+            registerFunc $ Func $ ignorepos locfunc
 
         loadSymbol (SynModStruct locstruct) = return ()
         
@@ -279,7 +288,8 @@ loadModuleSymbols mod = mapM_ loadSymbol (modStmts mod)
 -- | Module execution
 runmodule :: SynModule -> Exec ()
 runmodule m =
-    do loadModuleSymbols m
+    do loadNativeSymbols
+       loadModuleSymbols m
        runPrintLn "Hello"
-       main <- findProc "main"
+       main <- findProc "main" (ProcType [])
        runProc main 
