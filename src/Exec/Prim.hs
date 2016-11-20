@@ -4,6 +4,7 @@ import Control.Monad
 import Data.List (find)
 import Syntactic
 import PosParsec
+import Types
 
 -- = Program State
 
@@ -21,14 +22,11 @@ data Val = IntVal Int
          deriving (Show, Eq)
 
 
--- | Value type
-data Type = IntType
-          | FloatType
-          | BoolType
-          | StructType String [(String, Type)]
-          | ProcType [Type]
-          | FuncType [Type] [Type]
-          deriving (Show, Eq)
+instance Typed Val where
+    toType (IntVal _) = IntType
+    toType (FloatVal _) = FloatType
+    toType (BoolVal _) = BoolType
+    toType None = NoneType
 
 
 -- | Variable
