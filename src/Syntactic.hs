@@ -4,6 +4,7 @@ import Control.Monad.Identity
 import Text.Parsec (eof, sepBy)
 import Text.Parsec.Prim
 import Text.Parsec.Expr
+import Types
 import PosParsec
 import Lexical
 
@@ -32,10 +33,13 @@ synlex lextok = syntoken $
     \t -> if t == lextok then Just (SynToken t) else Nothing
 
 -- | Syntactic construct for identifier
-data SynIdent = SynIdent { getlabel :: String } -- deriving (Show)
+data SynIdent = SynIdent { getlabel :: String }
 
 instance Show SynIdent where
     show x = getlabel x
+
+instance Named SynIdent where
+    getName = getlabel
 
 -- | SynParser for identifier
 synident :: SynParser SynIdent
@@ -47,6 +51,15 @@ synident = syntoken $
 -- | Syntactic construct for identifier
 data SynType = SynType { getTypeIdent :: (Located SynIdent) } 
              | SynTypeGen deriving (Show)
+
+
+instance Typed SynType where
+    toType tp = let name = getlabel . ignorepos . getTypeIdent $ tp
+                 in case name of
+                     "int" -> IntType
+                     "bool" -> BoolType
+                     "float" -> FloatType
+                     name -> NamedType name
 
 {--
 This aux function it's temporary. LUIS: FIX.
@@ -76,6 +89,9 @@ synidentlist = fmap SynIdentList (synident `sepBy` (synlex LexComma))
 -- | Syntactic construct for typed identifier
 data SynTypedIdent = SynTypedIdent { getTypedIdentName :: (Located SynIdent)
                                    , getTypedIdentType :: (Located SynType) } deriving (Show)
+
+instance Typed SynTypedIdent where
+    toType tid = toType $ getTypedIdentType tid
 
 synSingleTypeIdentList :: SynSpecParser [SynTypedIdent]
 synSingleTypeIdentList = do var <- fmap getidentlist synidentlist
@@ -317,6 +333,13 @@ data SynProc = SynProc { getProcIdent :: (Located SynIdent)
                        , getProcArgs ::  [SynTypedIdent]
                        , getProcBlock :: (Located SynBlock)
                        } deriving (Show)
+
+
+instance Typed SynProc where
+    toType p = ProcType $ toTypeList $ getProcArgs p
+
+instance Named SynProc where
+    getName p = getName $ getProcIdent p
 
 -- | SynParser for definition of a procedure
 synproc :: SynParser SynProc

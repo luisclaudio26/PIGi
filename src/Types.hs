@@ -1,13 +1,16 @@
 module Types where
 
-import Syntactic
-
 type Name = String
+
+class Named a where
+    getName :: a -> Name
+
 
 data Type = Placeholder String -- ^ template argument
           | IntType
           | FloatType
           | BoolType
+          | NamedType Name -- struct type, unbinded
           | StructType Name [(Name, Type)]
           | ProcType [Type]
           | FuncType [Type] [Type]
@@ -61,3 +64,7 @@ class Typed a where
 class TypedList a where
     -- | Convert to list of types
     toTypeList :: a -> [Type]
+
+
+instance (Typed a) => TypedList [a] where
+    toTypeList = map toType

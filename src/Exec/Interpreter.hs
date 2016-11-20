@@ -2,6 +2,7 @@ module Exec.Interpreter where
 
 import Exec.Prim
 import Exec.Expr
+import Types
 import Syntactic
 import PosParsec
 
@@ -213,11 +214,11 @@ registerRets rets =
 
 -- == Procedures
 
--- | Procedure execution
-runProc :: SynProc -> Exec ()
-runProc p = do runPrintLn $ "starting procedure " ++ getProcName p
-               runBlock $ getProcBlock p
-               runPrintLn $ "ending procedure " ++ getProcName p
+-- | Execute procedure
+-- No preparation is made by this function
+runProc :: Proc -> Exec ()
+runProc (NativeProc _ _ x) = x []
+runProc (Proc p) = runBlock $ getProcBlock p
 
 
 -- | Procedure call
@@ -226,9 +227,13 @@ callProc loccall =
     let call = ignorepos loccall
      in do argValues <- mapM evalExpr (getexprlist . getArgList $ call)
            vt <- saveAndClearScope
-           proc <- findProc (getlabel . ignorepos . getFuncId $ call) 
-           registerArgs (getProcArgs proc) argValues
-           runProc proc
+           let pname = getName . getFuncId $ call
+               ptype = ProcType $ toTypeList argValues
+           proc <- findProc pname ptype
+           case proc of
+             (NativeProc _ _ x) -> x argValues
+             (Proc sp) -> do registerArgs (getProcArgs sp) argValues
+                             runBlock $ getProcBlock sp
            modifyVarTable vt
 
 
@@ -281,5 +286,5 @@ runmodule :: SynModule -> Exec ()
 runmodule m =
     do loadModuleSymbols m
        runPrintLn "Hello"
-       main <- findProc "main"
+       main <- findProc "main" (ProcType [])
        runProc main 

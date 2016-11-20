@@ -37,6 +37,24 @@ data Var = Var { getVarName :: String
                } deriving (Show)
 
 
+instance Typed Var where
+    toType = getVarType
+
+
+data Proc = NativeProc Name Type ([Val] -> Exec ())
+          | Proc SynProc
+
+
+instance Typed Proc where
+    toType (NativeProc _ t _) = t
+    toType (Proc sproc) = toType sproc
+
+
+instance Named Proc where
+    getName (NativeProc n _ _) = n
+    getName (Proc sproc) = getName sproc
+
+
 -- | Update variable value
 setVarValue :: Var -> Val -> Var
 setVarValue var val =
@@ -49,11 +67,13 @@ setVarScope var scope =
     Var (getVarName var) (getVarType var) (getVarValue var) scope
 
 
+type ProcTable = [Proc]
+
 -- | Program State
 data ProgramState =
     State { getVarTable :: [Var] -- ^ Variable table
           , getStructTable :: [Type] -- ^ Struct table
-          , getProcTable :: [SynProc] -- ^ Procedure table
+          , getProcTable :: ProcTable -- ^ Procedure table
           , getFuncTable :: [SynFunc] -- ^ Function table
           }
 
@@ -155,12 +175,12 @@ obtainStructTable = mkEval $ return . getStructTable
 
 
 -- | Get current procedure table
-obtainProcTable :: Exec [SynProc]
+obtainProcTable :: Exec ProcTable
 obtainProcTable = mkEval $ return . getProcTable
 
 
 -- | Set current procedure table
-modifyProcTable :: [SynProc] -> Exec ()
+modifyProcTable :: ProcTable -> Exec ()
 modifyProcTable pt = mkExec $
     \state -> let vt = getVarTable state
                   st = getStructTable state
@@ -203,10 +223,12 @@ runStatus =
 
 -- == Procedure table auxiliary functions
 
-findProc :: String -> Exec SynProc
-findProc procname =
+findProc :: String -> Type -> Exec Proc
+findProc procname proctype =
     do procs <- obtainProcTable
-       let proc = find (\p -> getProcName p == procname) procs
+       let matchname = (==procname) . getName
+           matchtype = (==proctype) . toType
+           proc = find (\s -> matchname s && matchtype s) procs
        case proc of
          Just p -> return p
          Nothing -> error $ "couldn't find procedure " ++ procname
@@ -216,7 +238,7 @@ findProc procname =
 registerProc :: SynProc -> Exec ()
 registerProc p =
     do procs <- obtainProcTable
-       modifyProcTable $ p : procs
+       modifyProcTable $ (Proc p) : procs
 
 
 -- == Function table auxiliary functions
