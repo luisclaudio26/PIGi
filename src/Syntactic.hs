@@ -48,17 +48,15 @@ synident = syntoken $
             (LexIdent s) -> Just (SynIdent s)
             _ -> Nothing
 
-{--
-This aux function it's temporary. LUIS: FIX.
---}
+{--This aux function it's temporary.--}
 getLabelFromType :: SynType -> String
 getLabelFromType t = getlabel . ignorepos . getTypeIdent $ t
 
--- | Syntactic construct for identifier 
+-- | Syntactic construct for type 
 data SynType = SynType
              | SynTypeNGen{ getTypeIdent :: (Located SynIdent)}
              | SynTypeGen { getTypeIdent :: (Located SynIdent)
-                          , getTypeArgs  :: (Located SynTypeList) }deriving (Show)--}
+                          , getTypeArgs  :: (Located SynTypeList) }deriving (Show)
 
 instance Typed SynType where
     toType tp = let name = getlabel . ignorepos . getTypeIdent $ tp
@@ -68,9 +66,9 @@ instance Typed SynType where
                      "float" -> FloatType
                      name -> NamedType name
 
-{--Refactor here to accepts SyntypeNGen and SynTypeGen --}
+-- | SynParser of type
 syntype :: SynParser SynType
-syntype =  syntypegen <|> syntypengen
+syntype = try syntypegen <|> syntypengen
 
 -- | SynParser of a non generic type
 syntypengen:: SynParser SynType
@@ -96,17 +94,17 @@ syntypelist = fmap SynTypeList (syntype `sepBy` (synlex LexComma))
 syntident :: SynParser SynIdentList
 syntident = locate $
   do synlex LexLT
-     ttype <- fmap getidentlist synidentlist
+     formalParam <- fmap getidentlist synidentlist
      synlex LexGT
-     return $ SynIdentList ttype
+     return $ SynIdentList formalParam
 
 -- <int, float, bool>
 synttype :: SynParser SynTypeList
 synttype = locate $
   do synlex LexLT
-     ttype <- fmap gettypelist syntypelist
+     formalParam <- fmap gettypelist syntypelist
      synlex LexGT
-     return $ SynTypeList ttype
+     return $ SynTypeList formalParam
 
 -- | Syntactic construct for identifiers list
 data SynIdentList = SynIdentList { getidentlist :: [Located SynIdent] } deriving (Show)
@@ -143,9 +141,9 @@ synTypedIdentList :: SynSpecParser SynTypedIdentList
 synTypedIdentList = fmap SynTypedIdentList (synSingleTypeIdentList `sepBy` (synlex LexSemicolon))
 
 
---------------------------------COUPLE IDENT: TEMPLATE USE--------------------------------------------
+-----------------------------------------FORMAL TYPE: TEMPLATE USE-------------------------------------
 data SynCoupleIdent = SynCoupleIdent { getIdentName :: (Located SynIdent)
-                                     , getFakeType :: (Located SynIdent) } deriving (Show)
+                                     , getFormalType :: (Located SynIdent) } deriving (Show)
 -- x, y, z : t1 into x: t1, y: t1, z: t1
 synSingleCoupleIdentList :: SynSpecParser [SynCoupleIdent]
 synSingleCoupleIdentList = do var <- fmap getidentlist synidentlist
@@ -157,7 +155,7 @@ synSingleCoupleIdentList = do var <- fmap getidentlist synidentlist
 -- | Syntactic construct for typed identifier list
 data SynCoupleIdentList = SynCoupleIdentList { getcoupleidentlist :: [[SynCoupleIdent]] }
 
--- | SynParser for list of identifiers
+-- | SynParser for list of  synCoupleIdentList
 synCoupleIdentList :: SynSpecParser SynCoupleIdentList
 synCoupleIdentList = fmap SynCoupleIdentList (synSingleCoupleIdentList `sepBy` (synlex LexSemicolon))
 ------------------------------------------------------------------------------------------------------
@@ -211,14 +209,14 @@ data SynStruct = SynStruct { getTemplateIdent :: (Maybe (Located SynIdentList))
 synstruct :: SynParser SynStruct
 synstruct = locate $
   do synlex LexStruct
-     ttype <- fmap Just syntident <|> return Nothing
+     formalParam <- fmap Just syntident <|> return Nothing
      name <- synident
      synlex LexAttr
      synlex LexLParen
      i <- fmap gettypedidentlist synTypedIdentList -- case ttype != nothing: i <- fmap getcoupleidentlist synCoupleIdentList 
      synlex LexRParen
      synlex LexSemicolon
-     return $ SynStruct ttype name (collapseList i)
+     return $ SynStruct formalParam name (collapseList i)
 
 -- = Definitions
 
@@ -365,7 +363,7 @@ data SynFor = SynFor
 
 -- | SynParser for 'for'
 synfor :: SynParser SynFor
-synfor = synforp <|> synfornp
+synfor = try synforp <|> synfornp
 
 -- | SynParser of natural for
 synfornp :: SynParser SynFor
