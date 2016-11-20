@@ -169,6 +169,22 @@ modifyProcTable pt = mkExec $
                   ft = getFuncTable state
                in return (State vt st pt ft)
 
+
+-- | Get current function table
+obtainFuncTable :: Exec [SynFunc]
+obtainFuncTable = mkEval $ return . getFuncTable
+
+
+-- | Set current procedure table
+modifyFuncTable :: [SynFunc] -> Exec ()
+modifyFuncTable ft = mkExec $
+    \state -> let vt = getVarTable state
+                  st = getStructTable state
+                  pt = getProcTable state
+               in return (State vt st pt ft)
+
+
+
 -- = Auxiliary functions
 
 -- == Debug
@@ -198,6 +214,31 @@ findProc procname =
          Nothing -> error $ "couldn't find procedure " ++ procname
 
 
+-- | Register procedure into procedure table
+registerProc :: SynProc -> Exec ()
+registerProc p =
+    do procs <- obtainProcTable
+       modifyProcTable $ p : procs
+
+
+-- == Function table auxiliary functions
+
+findFunc :: String -> Exec SynFunc
+findFunc funcname =
+    do funcs <- obtainFuncTable
+       let func = find ((==funcname) . getFuncName) funcs
+       case func of
+         Just d -> return d
+         Nothing -> error $ "couldn't find function " ++ funcname
+
+
+-- | Register function into function table
+registerFunc :: SynFunc -> Exec ()
+registerFunc f =
+    do funcs <- obtainFuncTable
+       modifyFuncTable $ f : funcs
+
+
 -- == Struct table auxiliary functions
 
 findType :: SynType -> Exec Type
@@ -212,11 +253,10 @@ findType (SynType locident args)
 -- == Variable table auxiliary functions
 
 -- | Search for variable on table
-findVar :: SynIdent -> Exec Var
-findVar varident =
+findVar :: String -> Exec Var
+findVar varname =
     do vars <- obtainVarTable
-       let varname = getlabel varident
-           var = find ((== varname) . getVarName) vars
+       let var = find ((== varname) . getVarName) vars
        case var of
          Just p -> return p
          Nothing -> error $ "variable not found: " ++ varname

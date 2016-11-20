@@ -256,15 +256,23 @@ data SynStmt = SynStmtDef (Located SynDef)
              | SynStmtAttr (Located SynAttr)
              | SynStmtDefAttr (Located SynDefAttr)
              | SynStmtIf (Located SynIf)
+             | SynStmtWhile (Located SynWhile)
+             | SynStmtCall (Located SynCall)
 
 instance Show SynStmt where
     show (SynStmtDef  x) = show x ++ "\n"
     show (SynStmtAttr x) = show x ++ "\n"
+    show (SynStmtIf x) = show x ++ "\n"
+    show (SynStmtWhile x) = show x ++ "\n"
+    show (SynStmtCall x) = show x ++ "\n"
+
 
 synstmt :: SynParser SynStmt
 synstmt = locate $ fmap SynStmtDef syndef 
+               <|> try (fmap SynStmtCall synpcall)
                <|> fmap SynStmtAttr synattr
                <|> fmap SynStmtIf synifstr 
+               <|> fmap SynStmtWhile synwhile
 
 -- | Syntactic construct for block
 data SynBlock = SynBlock { getStmts :: [Located SynStmt] } deriving (Show)
@@ -320,7 +328,9 @@ synelse = do synlex LexElse
 -- == while
 
 -- | Syntactic construct for 'while'
-data SynWhile = SynWhile (Located SynExpr) (Located SynBlock) deriving (Show)
+data SynWhile = SynWhile { getWhileCondition :: (Located SynExpr)
+                         , getWhileBlock :: (Located SynBlock)
+                         } deriving (Show)
 
 -- | SynParser for while
 synwhile :: SynParser SynWhile
@@ -382,11 +392,15 @@ getProcName :: SynProc -> String
 getProcName p = getlabel . ignorepos . getProcIdent $ p
 
 -- | Syntactic construct for 'func'
-data SynFunc = SynFunc { getFuncName :: (Located SynIdent) 
+data SynFunc = SynFunc { getFuncIdent :: (Located SynIdent) 
                        , getTempType :: (Maybe (Located SynIdentList))
                        , getFuncArgs :: [SynTypedIdent]  
                        , getFuncRet :: [SynTypedIdent]
-                       , getFuncBlock :: (Located SynBlock) } deriving (Show)
+                       , getFuncBlock :: (Located SynBlock)
+                       } deriving (Show)
+
+getFuncName :: SynFunc -> String
+getFuncName f = getlabel . ignorepos . getFuncIdent $ f
 
 -- | SynParser for definition of a function
 synfunc :: SynParser SynFunc
@@ -413,13 +427,14 @@ synexprlist :: SynSpecParser SynExprList
 synexprlist = fmap SynExprList $ sepBy synexpr (synlex LexComma) 
 
 -- | Syntactic construct for function/procedure call
-data SynCall = SynCall { getfuncid :: Located SynIdent
-                       , getarglist :: SynExprList }
+data SynCall = SynCall { getFuncId :: Located SynIdent
+                       , getArgList :: SynExprList
+                       }
 
 instance Show SynCall where
     show (SynCall id list) = show id ++ "(" ++ show list ++ ")"
 
--- | SynParser for function/procedure call
+-- | SynParser for function call
 syncall :: SynParser SynCall
 syncall = locate $
     do fid <- synident
@@ -427,6 +442,15 @@ syncall = locate $
        exprs <- synexprlist
        synlex LexRParen
        return $ SynCall fid exprs
+
+
+-- | SynParser for procedure call
+synpcall :: SynParser SynCall
+synpcall = 
+    do call <- syncall
+       synlex LexSemicolon
+       return call
+
 
 -- | Syntactic construct for expressions
 data SynExpr = SynIdentExpr (Located SynIdent)
