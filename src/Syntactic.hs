@@ -51,17 +51,14 @@ getLabelFromType :: SynType -> String
 getLabelFromType t = getlabel . ignorepos . getTypeIdent $ t
 
 -- | Syntactic construct for identifier 
-data SynType = SynType { getTypeIdent :: (Located SynIdent)
-                        ,getTypeArgs :: (Maybe (Located SynTypeList)) }
-             | SynTypeNGen (Located SynIdent) 
-             | SynTypeGen (Located SynIdent) (Located SynTypeList) deriving (Show)
+data SynType = SynType
+             | SynTypeNGen{ getTypeIdent :: (Located SynIdent)}
+             | SynTypeGen { getTypeIdent :: (Located SynIdent)
+                          , getTypeArgs  :: (Located SynTypeList) }deriving (Show)--}
 
 {--Refactor here to accepts SyntypeNGen and SynTypeGen --}
 syntype :: SynParser SynType
-syntype = locate $
-  do name <- synident
-     args <- fmap Just synttype <|> return Nothing
-     return $ SynType name args
+syntype =  syntypegen <|> syntypengen
 
 -- | SynParser of a non generic type
 syntypengen:: SynParser SynType
@@ -81,7 +78,7 @@ syntypegen = locate $
 data SynTypeList = SynTypeList { gettypelist :: [Located SynType] } deriving (Show)
 
 syntypelist :: SynSpecParser SynTypeList
-syntypelist = fmap SynTypeList (syntype `sepBy` (synlex LexComma)) {-- this way, shouldn't be able to :  int, float, point<int,bool> --}
+syntypelist = fmap SynTypeList (syntype `sepBy` (synlex LexComma))
 
 -- <t1, t2, t3>
 syntident :: SynParser SynIdentList
@@ -187,7 +184,10 @@ synlitbool = syntoken $
             _ -> Nothing
 
 -- | Syntactic construct for 'struct'
-data SynStruct = SynStruct (Maybe (Located SynIdentList)) (Located SynIdent) [SynTypedIdent] deriving (Show)
+data SynStruct = SynStruct { getTemplateIdent :: (Maybe (Located SynIdentList))
+                            ,getStructName :: (Located SynIdent)
+                            ,getTuple :: [SynTypedIdent]
+                           } deriving (Show)
 
 -- | SynParser for 'struct'
 synstruct :: SynParser SynStruct
@@ -197,8 +197,7 @@ synstruct = locate $
      name <- synident
      synlex LexAttr
      synlex LexLParen
-     -- case syntident(ttype) is there, use i <- fmap getcoupleidentlist synCoupleIdentList
-     i <- fmap gettypedidentlist synTypedIdentList
+     i <- fmap gettypedidentlist synTypedIdentList -- case ttype != nothing: i <- fmap getcoupleidentlist synCoupleIdentList 
      synlex LexRParen
      synlex LexSemicolon
      return $ SynStruct ttype name (collapseList i)
@@ -342,12 +341,15 @@ synwhile = locate $
 
 -- == for
 -- | Syntactic construct for 'for'
-data SynFor = SynForNP (Located SynIdent) (Located SynExpr) (Located SynBlock)
+data SynFor = SynFor
+            | SynForNP (Located SynIdent) (Located SynExpr) (Located SynBlock)
             | SynForP [Located SynIdent] (Located SynExpr) (Located SynBlock) deriving (Show)
 
---todo: create synfor to use synfornp xor synforp
-
 -- | SynParser for 'for'
+synfor :: SynParser SynFor
+synfor = synforp <|> synfornp
+
+-- | SynParser of natural for
 synfornp :: SynParser SynFor
 synfornp = locate $
   do synlex LexFor

@@ -242,7 +242,7 @@ registerFunc f =
 -- == Struct table auxiliary functions
 
 findType :: SynType -> Exec Type
-findType (SynType locident args)
+findType (SynTypeGen locident args) -- SynTypeNGen locident
   | i == "int" = return IntType
   | i == "float" = return FloatType
   | i == "bool" = return BoolType
