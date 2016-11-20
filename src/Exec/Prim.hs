@@ -235,10 +235,10 @@ findProc procname proctype =
 
 
 -- | Register procedure into procedure table
-registerProc :: SynProc -> Exec ()
+registerProc :: Proc -> Exec ()
 registerProc p =
     do procs <- obtainProcTable
-       modifyProcTable $ (Proc p) : procs
+       modifyProcTable $ p : procs
 
 
 -- == Function table auxiliary functions

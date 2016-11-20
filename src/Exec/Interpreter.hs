@@ -2,6 +2,7 @@ module Exec.Interpreter where
 
 import Exec.Prim
 import Exec.Expr
+import Exec.Native
 import Types
 import Syntactic
 import PosParsec
@@ -266,6 +267,10 @@ callFunc loccall =
 
 -- = Module Execution
 
+-- | Load builtin procedures and functions
+loadNativeSymbols :: Exec ()
+loadNativeSymbols = mapM_ registerProc nativeProcs
+
 -- | Load global variables, procedures, functions ans structs
 loadModuleSymbols :: SynModule -> Exec ()
 loadModuleSymbols mod = mapM_ loadSymbol (modStmts mod)
@@ -273,7 +278,7 @@ loadModuleSymbols mod = mapM_ loadSymbol (modStmts mod)
         loadSymbol (SynModDef locdef) = return ()
 
         loadSymbol (SynModProc locproc) =
-            registerProc $ ignorepos locproc
+            registerProc $ Proc $ ignorepos locproc
 
         loadSymbol (SynModFunc locfunc) = 
             registerFunc $ ignorepos locfunc
@@ -284,7 +289,8 @@ loadModuleSymbols mod = mapM_ loadSymbol (modStmts mod)
 -- | Module execution
 runmodule :: SynModule -> Exec ()
 runmodule m =
-    do loadModuleSymbols m
+    do loadNativeSymbols
+       loadModuleSymbols m
        runPrintLn "Hello"
        main <- findProc "main" (ProcType [])
        runProc main 
