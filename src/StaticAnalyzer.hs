@@ -66,7 +66,7 @@ stFromTypedIdentList st modid [] = st
 stFromTypedIdentList st modid (h:t) = stFromTypedIdentList newST modid t
                                         where newST = entry : st
                                               entry = Variable (getlabel $ ignorepos $ getTypedIdentName h) 
-                                                               (getlabel $ ignorepos $ getTypedIdentType h) 
+                                                               (getLabelFromType $ ignorepos $ getTypedIdentType h) 
                                                                 modid 
 
 -----------------------------------------------
