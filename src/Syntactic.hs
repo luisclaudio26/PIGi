@@ -310,10 +310,14 @@ getProcName :: SynProc -> String
 getProcName p = getlabel . ignorepos . getProcIdent $ p
 
 -- | Syntactic construct for 'func'
-data SynFunc = SynFunc { getFuncName :: (Located SynIdent) 
+data SynFunc = SynFunc { getFuncIdent :: (Located SynIdent) 
                        , getFuncArgs :: [SynTypedIdent]  
                        , getFuncRet :: [SynTypedIdent]
-                       , getFuncBlock :: (Located SynBlock) } deriving (Show)
+                       , getFuncBlock :: (Located SynBlock)
+                       } deriving (Show)
+
+getFuncName :: SynFunc -> String
+getFuncName f = getlabel . ignorepos . getFuncIdent $ f
 
 -- | SynParser for definition of a function
 synfunc :: SynParser SynFunc

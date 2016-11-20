@@ -6,9 +6,75 @@ import Syntactic
 import PosParsec
 
 
+-- = Expressions
+-- These functions are not part of Exec.Expr to
+-- avoid circular imports
+
+-- | Execution to run binary operation
+evalUn :: (Val -> Exec Val) -- ^ Value computation function
+       -> (Located SynExpr) -- ^ Expression
+       -> Exec Val
+evalUn comp expr =
+    do val <- evalExpr expr
+       comp val
+
+
+-- | Execution to run binary operation
+evalBin :: (Val -> Val -> Exec Val) -- ^ Value computation function
+        -> (Located SynExpr) -- ^ Left expression
+        -> (Located SynExpr) -- ^ Right expression
+        -> Exec Val
+evalBin comp expr1 expr2 =
+    do v1 <- evalExpr expr1
+       v2 <- evalExpr expr2
+       comp v1 v2
+
+
+-- | Execution to evaluate expression
+evalExpr :: (Located SynExpr) -> Exec Val
+evalExpr = eval . ignorepos
+    where eval :: SynExpr -> Exec Val
+
+          eval (SynLitIntExpr locint) =
+              return $ IntVal $ getint . ignorepos $ locint
+
+          eval (SynLitBoolExpr locbool) =
+              return $ BoolVal $ getbool . ignorepos $ locbool
+
+          eval (SynIdentExpr locident) =
+              do var <- findVar . getlabel . ignorepos $ locident
+                 return $ getVarValue var
+
+          eval (SynCallExpr loccall) = fmap head $ callFunc loccall
+
+          eval (SynPar e) = evalExpr e
+          eval (SynNeg e) = evalUn negVal e
+          eval (SynBitNot e) = evalUn bitNotVal e
+          eval (SynTimes e1 e2) = evalBin timesVal e1 e2
+          eval (SynDiv e1 e2) = evalBin divVal e1 e2
+          eval (SynMod e1 e2) = evalBin modVal e1 e2
+          eval (SynPlus e1 e2) = evalBin plusVal e1 e2
+          eval (SynMinus e1 e2) = evalBin minusVal e1 e2
+          eval (SynRShift e1 e2) = evalBin rshiftVal e1 e2
+          eval (SynLShift e1 e2) = evalBin lshiftVal e1 e2
+          eval (SynEQ e1 e2) = evalBin eqVal e1 e2
+          eval (SynNEQ e1 e2) = evalBin neqVal e1 e2
+          eval (SynLT e1 e2) = evalBin ltVal e1 e2
+          eval (SynLE e1 e2) = evalBin leVal e1 e2
+          eval (SynGT e1 e2) = evalBin gtVal e1 e2
+          eval (SynGE e1 e2) = evalBin geVal e1 e2
+          eval (SynBitAnd e1 e2) = evalBin bitAndVal e1 e2
+          eval (SynBitXor e1 e2) = evalBin bitXorVal e1 e2
+          eval (SynBitOr e1 e2) = evalBin bitOrVal e1 e2
+          eval (SynNot e) = evalUn notVal e
+          eval (SynAnd e1 e2) = evalBin andVal e1 e2
+          eval (SynXor e1 e2) = evalBin xorVal e1 e2
+          eval (SynOr e1 e2) = evalBin orVal e1 e2
+
+
+
 -- = Statements
 
--- | Conditional execution
 
 -- | Auxiliar function to allow folding
 runIfPart :: Exec Bool 
@@ -53,10 +119,9 @@ runWhile locwhile =
                if v == BoolVal True
                then runBlock block >> runRecWhile cond block
                else return ()
-    in do
-        raiseScope
-        runRecWhile (getWhileCondition while) (getWhileBlock while)
-        dropScope
+    in do raiseScope
+          runRecWhile (getWhileCondition while) (getWhileBlock while)
+          dropScope
 
 
 -- | Definition execution
@@ -71,8 +136,28 @@ runDef locdef =
 
 
 -- | Attribution execution
+-- Includes the list = function() case
 runAttr :: (Located SynAttr) -> Exec ()
 runAttr locattr =
+    do let attr = ignorepos locattr
+           locidents = getAttrVars attr 
+           locexprs = getAttrExprs attr
+       if (length locidents > 0) && (length locexprs == 1)
+       then
+        let expr0 = ignorepos $ head locexprs
+         in case expr0 of
+              (SynCallExpr loccall) ->
+                  do vals <- callFunc loccall
+                     let names = map (getlabel . ignorepos) locidents
+                     sequence_ $ zipWith changeVar names vals
+              _ -> distRunAttr locattr
+       else distRunAttr locattr
+
+
+-- | Basic attribution execution, with a list of identifiers
+-- and a list of expressions of the same length
+distRunAttr :: (Located SynAttr) -> Exec ()
+distRunAttr locattr =
     do let attr = ignorepos locattr
            locidents = getAttrVars attr 
            locexprs = getAttrExprs attr
@@ -102,8 +187,31 @@ runBlock locblock =
     do let block = ignorepos locblock
        mapM_ runStmt $ getStmts block
 
+-- = Subprograms
 
--- = Procedures
+-- | Add procedure/function arguments to variable table
+registerArgs :: [SynTypedIdent] -> [Val] -> Exec ()
+registerArgs formalArgs values =
+    let regVar :: SynTypedIdent -> Val -> Exec ()
+        regVar tid val =
+            do let vname = getlabel . ignorepos . getTypedIdentName $ tid
+               vtype <- findType . ignorepos . getTypedIdentType $ tid
+               registerLocalVar vname vtype val
+     in sequence_ $ zipWith regVar formalArgs values
+
+
+-- | Add function returns to variable table
+registerRets :: [SynTypedIdent] -> Exec ()
+registerRets rets = 
+    let regVar :: SynTypedIdent -> Exec ()
+        regVar tid =
+            do let vname = getlabel . ignorepos . getTypedIdentName $ tid
+               vtype <- findType . ignorepos . getTypedIdentType $ tid
+               registerLocalUndefVar vname vtype
+     in mapM_ regVar rets
+
+
+-- == Procedures
 
 -- | Procedure execution
 runProc :: SynProc -> Exec ()
@@ -116,39 +224,55 @@ runProc p = do runPrintLn $ "starting procedure " ++ getProcName p
 callProc :: Located SynCall -> Exec ()
 callProc loccall =
     let call = ignorepos loccall
-        regVar :: SynTypedIdent -> Val -> Exec ()
-        regVar tid val =
-            do let vname = getlabel . ignorepos . getTypedIdentName $ tid
-               vtype <- findType . ignorepos . getTypedIdentType $ tid
-               registerLocalVar vname vtype val
-
-     in do vargs <- mapM evalExpr (getexprlist . getArgList $ call)
+     in do argValues <- mapM evalExpr (getexprlist . getArgList $ call)
            vt <- saveAndClearScope
            proc <- findProc (getlabel . ignorepos . getFuncId $ call) 
-           sequence_ $ zipWith regVar (getProcArgs proc) vargs
+           registerArgs (getProcArgs proc) argValues
            runProc proc
            modifyVarTable vt
 
 
+-- = Functions
+
+-- | Function execution
+runFunc :: SynFunc -> Exec ()
+runFunc f = do runPrintLn $ "starting function " ++ getFuncName f
+               runBlock $ getFuncBlock f
+               runPrintLn $ "ending function " ++ getFuncName f
+
+
+-- | Function call
+callFunc :: Located SynCall -> Exec [Val]
+callFunc loccall =
+    let call = ignorepos loccall
+     in do argValues <- mapM evalExpr (getexprlist . getArgList $ call)
+           vt <- saveAndClearScope
+           func <- findFunc (getlabel . ignorepos . getFuncId $ call) 
+           registerArgs (getFuncArgs func) argValues
+           registerRets (getFuncRet func) 
+           runFunc func
+           let getName = getlabel . ignorepos . getTypedIdentName
+               retNames = map getName (getFuncRet func)
+               extrVal vname = fmap getVarValue $ findVar vname
+           rets <- mapM extrVal retNames
+           modifyVarTable vt
+           return rets
+
+
 -- = Module Execution
-
--- | Register procedure into procedure table
-registerProc :: SynProc -> Exec ()
-registerProc p =
-    do procs <- obtainProcTable
-       modifyProcTable $ p : procs
-
 
 -- | Load global variables, procedures, functions ans structs
 loadModuleSymbols :: SynModule -> Exec ()
 loadModuleSymbols mod = mapM_ loadSymbol (modStmts mod)
     where
         loadSymbol (SynModDef locdef) = return ()
+
         loadSymbol (SynModProc locproc) =
-            do let proc = ignorepos locproc
-               pt <- obtainProcTable
-               modifyProcTable $ proc : pt
-        loadSymbol (SynModFunc locfunc) = return ()
+            registerProc $ ignorepos locproc
+
+        loadSymbol (SynModFunc locfunc) = 
+            registerFunc $ ignorepos locfunc
+
         loadSymbol (SynModStruct locstruct) = return ()
         
 
