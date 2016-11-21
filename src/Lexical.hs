@@ -62,6 +62,7 @@ data LexToken = LexLParen         -- ^ @(@ token
               | LexLitFloat Float -- ^ @float@ literal
               | LexLitBool Bool   -- ^ @bool@ literal
               | LexModule
+              | Comment
               deriving (Show, Eq)
 
 -- | Map between keywords and lexical tokens
@@ -183,10 +184,20 @@ lexunit = do
     spaces
     return tk
 
+-- | Parses a comment
+comment :: LexParser
+comment = locate $ do
+    char '#'
+    manyTill anyChar newline
+    spaces
+    return Comment
+
+
 -- | PIG full lexical parser
 lexparser :: Parsec String () [PosLexToken]
 lexparser = do
     spaces
-    tks <- many lexunit
+    tks <- many (comment <|> lexunit)
     eof
-    return tks
+    return $ filter ((/=Comment) . ignorepos) tks
+
