@@ -26,7 +26,7 @@ runsynparser tokens filename =
 -- TODO: receive a list of SynModules, apply semModule to
 -- each one.
 runstaticanalyzer :: SynModule -> Either String SynModule
-runstaticanalyzer mod = semModule mod
+runstaticanalyzer mod = checkMod mod
 
 printStaticAnalyzer :: Either String SynModule -> IO ()
 printStaticAnalyzer x = case x of

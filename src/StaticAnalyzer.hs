@@ -1,7 +1,7 @@
 module StaticAnalyzer where
 
 import Syntactic
-import PosParsec(ignorepos)
+import PosParsec(ignorepos, Located)
 import Types
 
 --------------------------------------
@@ -160,28 +160,93 @@ isElemSymbolTable s (h:t) = case h of
                                                         then True
                                                         else isElemSymbolTable s t
 
------------------------------------------------
---------- Static analyzer for modules --------- TODO: Move this to another file when 
------------------------------------------------       things get more structured.
+-----------------------------------
+--------- Static analyzer --------- TODO: Move this to another file when 
+-----------------------------------       things get more structured.
+
+{- DROPPED. This is not useful anymore, as certainly
+    we'll have only one rule for modules. This idea for
+    chaining rules is "good", though, so I'll leave it
+    here so I can copy/paste it someday.
+
 -- This applies all the static semantic rules to x.
 -- Notice this will apply rules in inverse order, but
 -- we assume them to be commutative somehow (that is,
 -- order of verification should not be important).
 semModule' :: [SynModule -> Either String SynModule] -> SynModule -> Either String SynModule
 semModule' [] x = Right x
-semModule' (rule:tail) x  = (semModule' tail x) >>= rule
+semModule' (rule:tail) x  = (semModule' tail x) >>= rule -}
 
-semModule :: SynModule -> Either String SynModule
-semModule = semModule' semModuleRules
+-- Checking rules: each of these rules check SynStuff for
+-- soundness (according to soundness rules of each syntactic construct).
+-- The general idea is: the soundness of a syntactic construct
+-- depends on the soundness of what constitutes it; hence, when we have
+-- a syntactic unit S -> s1 s2 s3 ..., we check each syntactic subunit
+-- s1, s2, s3. If all of them are sound (i.e., all of them return RIGHT),
+-- we can say that S itself is sound. If any rule is wrong, 'though (i.e.,
+-- returns a LEFT), we say that S is also wrong and we forward the message
+-- inside LEFT.
+--
+-- IDEA: What if each Syn___ was instance of some Checkable typeclass,
+-- which is itself a monad, so we could chain Checkable stuff together?
+-- Would this eliminate all of those case blabla?
+--
+-- IDEA: Maybe we could chain the error messages to say something like
+-- "In module x, in func ___, in statement ___ : blablabla", just as
+-- Haskell compiler does.
+--
+checkMod :: SynModule -> Either String SynModule
+checkMod (SynModule id stmts) = case checkModStmts stmts of
+                                  Right _ -> Right (SynModule id stmts)
+                                  Left msg -> Left msg
 
--- This is a list of all static semantic rules for
--- modules.
-semModuleRules :: [SynModule -> Either String SynModule]
-semModuleRules = [modDummyRule]
+checkModStmts :: [SynModStmt] -> Either String [SynModStmt]
+checkModStmts [] = Right []
+checkModStmts (stmt:tail) = case checkedStmt of
+                            Left msg -> Left msg
+                            Right _ -> do x <- checkedStmt
+                                          y <- checkModStmts tail
+                                          Right (x : y)
+                          where checkedStmt = checkModStmt stmt
 
--- Each semantic rule has type SynModule -> Either String SynModule:
--- Right X indicates that SynModule verifies the rule and can be
--- used, Left X indicates something went wrong and X carries an error
--- message.
-modDummyRule :: SynModule -> Either String SynModule       -- Dummy rule for tests only
-modDummyRule mod = Left $ show (stFromModule ([],typeTable) mod)
+checkModStmt :: SynModStmt -> Either String SynModStmt
+checkModStmt stmt = case stmt of
+                  SynModStruct ss -> Right stmt    -- No rule for structs nor def's (so far)
+                  SynModDef sd -> Right stmt
+                  SynModProc sp -> case checkProc sp of
+                                      Right _ -> Right stmt
+                                      Left msg -> Left msg
+                  SynModFunc sf -> checkFunc sf
+
+checkFunc :: Located SynFunc -> Either String SynModStmt -- PENDING
+checkFunc func = Right $ SynModFunc func 
+
+checkProc :: Located SynProc -> Either String SynProc
+checkProc proc = case checkBlock $ getProcBlock unlocProc of
+                    Right _ -> Right unlocProc
+                    Left msg -> Left msg
+                  where unlocProc = ignorepos proc
+
+checkBlock :: Located SynBlock -> Either String SynBlock
+checkBlock block = case checkedStmts of
+                      Right _ -> Right $ ignorepos block
+                      Left msg -> Left msg
+                    where checkedStmts = checkStmts $ ignorepos `fmap` getStmts (ignorepos block)
+
+checkStmts :: [SynStmt] -> Either String [SynStmt]
+checkStmts [] = Right []
+checkStmts (stmt:tail) = case checkedStmt of
+                            Left msg -> Left msg
+                            Right _ -> do h <- checkedStmt
+                                          t <- checkStmts tail
+                                          Right (h:t)
+                          where checkedStmt = checkStmt stmt
+
+checkStmt :: SynStmt -> Either String SynStmt -- PENDING
+checkStmt s = case s of
+                SynStmtDef sd -> Right s
+                SynStmtAttr sa -> Left "TODO: Check attributions."
+                SynStmtDefAttr sda -> Right s
+                SynStmtIf si -> Right s
+                SynStmtWhile sw -> Right s
+                SynStmtCall sc -> Right s
