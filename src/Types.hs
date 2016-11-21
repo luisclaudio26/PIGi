@@ -12,11 +12,13 @@ data Type = Placeholder String -- ^ template argument
           | BoolType
           | NamedType Name -- struct type, unbinded
           | StructType Name [(Name, Type)]
-          | ProcType [Type]
-          | FuncType [Type] [Type]
+          | ProcType ArgTypes
+          | FuncType RetTypes ArgTypes
           | NoneType
           deriving (Show, Eq)
 
+type ArgTypes = [Type]
+type RetTypes = [Type]
 
 -- | List of all template arguments
 getPlaceholders :: Type -> [String]
@@ -68,3 +70,21 @@ class TypedList a where
 
 instance (Typed a) => TypedList [a] where
     toTypeList = map toType
+
+
+-- = Similarity
+-- Two types are similar if it is not possible
+-- to exist overloaded objects with both signatures,
+-- that is, the interpreter can distinguish them using
+-- available contextual information.
+
+-- | Check if types are functional similar
+-- Two types are functional similar if
+--   1. both are function types
+--   2. their argument list is of the same type
+funcSim :: Type -> Type -> Bool
+funcSim (FuncType _ ts1) (FuncType _ ts2) = ts1 == ts2
+funcSim _ _ = False
+
+
+

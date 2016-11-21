@@ -93,6 +93,9 @@ data SynTypedIdent = SynTypedIdent { getTypedIdentName :: (Located SynIdent)
 instance Typed SynTypedIdent where
     toType tid = toType $ getTypedIdentType tid
 
+instance Named SynTypedIdent where
+    getName = getName . getTypedIdentName
+
 synSingleTypeIdentList :: SynSpecParser [SynTypedIdent]
 synSingleTypeIdentList = do var <- fmap getidentlist synidentlist
                             synlex LexColon
@@ -361,6 +364,14 @@ data SynFunc = SynFunc { getFuncIdent :: (Located SynIdent)
                        , getFuncRet :: [SynTypedIdent]
                        , getFuncBlock :: (Located SynBlock)
                        } deriving (Show)
+
+instance Typed SynFunc where
+    toType f = let rettypes = (toTypeList $ getFuncRet f)
+                   argtypes = (toTypeList $ getFuncArgs f) 
+                in FuncType rettypes argtypes 
+
+instance Named SynFunc where
+    getName = getlabel . ignorepos . getFuncIdent
 
 getFuncName :: SynFunc -> String
 getFuncName f = getlabel . ignorepos . getFuncIdent $ f

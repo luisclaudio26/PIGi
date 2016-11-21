@@ -240,12 +240,6 @@ callProc loccall =
 
 -- = Functions
 
--- | Function execution
-runFunc :: SynFunc -> Exec ()
-runFunc f = do runPrintLn $ "starting function " ++ getFuncName f
-               runBlock $ getFuncBlock f
-               runPrintLn $ "ending function " ++ getFuncName f
-
 
 -- | Function call
 callFunc :: Located SynCall -> Exec [Val]
@@ -253,14 +247,19 @@ callFunc loccall =
     let call = ignorepos loccall
      in do argValues <- mapM evalExpr (getexprlist . getArgList $ call)
            vt <- saveAndClearScope
-           func <- findFunc (getlabel . ignorepos . getFuncId $ call) 
-           registerArgs (getFuncArgs func) argValues
-           registerRets (getFuncRet func) 
-           runFunc func
-           let getName = getlabel . ignorepos . getTypedIdentName
-               retNames = map getName (getFuncRet func)
-               extrVal vname = fmap getVarValue $ findVar vname
-           rets <- mapM extrVal retNames
+           let argTypes = toTypeList argValues
+               fname = getName . getFuncId $ call
+           func <- findFunc fname argTypes
+           rets <- case func of
+             (NativeFunc _ _ x) ->
+                 x argValues 
+             (Func sf) -> do
+                 registerArgs (getFuncArgs sf) argValues
+                 registerRets (getFuncRet sf) 
+                 runBlock $ getFuncBlock sf
+                 let retNames = map getName $ getFuncRet sf
+                     extrVal vname = fmap getVarValue $ findVar vname
+                 mapM extrVal retNames
            modifyVarTable vt
            return rets
 
@@ -281,7 +280,7 @@ loadModuleSymbols mod = mapM_ loadSymbol (modStmts mod)
             registerProc $ Proc $ ignorepos locproc
 
         loadSymbol (SynModFunc locfunc) = 
-            registerFunc $ ignorepos locfunc
+            registerFunc $ Func $ ignorepos locfunc
 
         loadSymbol (SynModStruct locstruct) = return ()
         
