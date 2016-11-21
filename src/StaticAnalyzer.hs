@@ -2,6 +2,7 @@ module StaticAnalyzer where
 
 import Syntactic
 import PosParsec(ignorepos)
+import Types
 
 --------------------------------------
 --------- Build symbol table ---------
@@ -27,7 +28,7 @@ type SymbolTable = [STEntry]
 data Field = Field { getFieldName :: String
                    , getFieldType :: String } deriving (Show)
 
-data UTEntry = StructType { getStructName :: String     -- Type name
+data UTEntry = StructEntry { getStructName :: String     -- Type name
                           , getStructFields :: [Field]  -- List of fields defined inside this struct
                           , getStructMod :: String }     -- module where it was defined
              | Primitive { getPrimName :: String } deriving (Show)
@@ -77,7 +78,7 @@ stFromStruct st modid stct = Right $ newSt
                                 where 
                                     newSt = (fst st, newTypeTable)
                                     newTypeTable = newEntry : (snd st)
-                                    newEntry = StructType (getlabel $ ignorepos $ getSynStructName stct)
+                                    newEntry = StructEntry (getlabel $ ignorepos $ getSynStructName stct)
                                                           ([])
                                                            modid
 
@@ -133,13 +134,13 @@ stFromTypedIdentList st modid (h:t) = let name = getlabel $ ignorepos $ getTyped
                                             else stFromTypedIdentList (newST, snd st) modid t
                                                   where newST = entry : (fst st)
                                                         entry = Variable (getlabel $ ignorepos $ getTypedIdentName h) 
-                                                                         (getlabel $ ignorepos $ getTypedIdentType h) 
+                                                                         (getLabelFromType $ ignorepos $ getTypedIdentType h) 
                                                                          modid 
 
 isElemUserTypeTable :: String -> [UTEntry] -> Bool
 isElemUserTypeTable s [] = False
 isElemUserTypeTable s (h:t) = case h of 
-                                StructType name _ _ -> if name == s 
+                                StructEntry name _ _ -> if name == s 
                                                         then True
                                                         else isElemUserTypeTable s t 
                                 Primitive name -> if name == s
