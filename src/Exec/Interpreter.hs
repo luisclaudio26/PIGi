@@ -34,24 +34,21 @@ evalBin comp expr1 expr2 =
 
 
 -- | Execution of struct value extraction
-obtStructVal :: LocSynExpr -> LocSynExpr -> Exec Val
-obtStructVal locstexpr locidexpr =
+obtStructVal :: LocSynExpr -> Located SynIdent -> Exec Val
+obtStructVal locstexpr locident =
     do let stexpr = ignorepos locstexpr
-           idexpr = ignorepos locidexpr
+           ident  = ignorepos locident
            extrNames (StructType _ ts) = map fst ts
-       case idexpr of
-         (SynIdentExpr locident) ->
-             do let idname = getName locident
-                stval <- evalExpr locstexpr
-                case stval of
-                  (StructVal sttype vals) ->
-                      let ns = extrNames sttype
-                          idx = elemIndex idname ns
-                       in case idx of
-                            Just i -> return $ vals !! i
-                            Nothing -> error "field not found"
-                  _ -> error "can't access non-structure"
-         _ -> error "invalid arrow operator usage"
+           idname = getName locident
+       stval <- evalExpr locstexpr
+       case stval of
+         (StructVal sttype vals) ->
+             let ns = extrNames sttype
+                 idx = elemIndex idname ns
+                 in case idx of
+                      Just i -> return $ vals !! i
+                      Nothing -> error "field not found"
+         _ -> error "can't access non-structure"
 
 
 -- | Execution to evaluate expression
@@ -73,7 +70,7 @@ evalExpr = eval . ignorepos
 
           eval (SynCallExpr loccall) = fmap head $ callFunc loccall
 
-          eval (SynArrow e1 e2) = obtStructVal e1 e2
+          eval (SynArrow expr ident) = obtStructVal expr ident
 
           eval (SynPar e) = evalExpr e
           eval (SynExp e1 e2) = evalBin expVal e1 e2

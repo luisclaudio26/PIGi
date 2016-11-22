@@ -438,7 +438,7 @@ data SynExpr = SynIdentExpr (Located SynIdent)
              | SynLitFloatExpr (Located SynLitFloat)
              | SynLitBoolExpr (Located SynLitBool)
              | SynCallExpr (Located SynCall)
-             | SynArrow    LocSynExpr LocSynExpr
+             | SynArrow    LocSynExpr (Located SynIdent)
              | SynPar      LocSynExpr
              | SynExp      LocSynExpr LocSynExpr
              | SynNeg      LocSynExpr
@@ -549,6 +549,21 @@ synexprUnit = synexprPar <|> synexprLitInt
                          <|> try synexprCall
                          <|> synexprIdent
 
+
+-- | Unit followes by arrow access parser
+synexprArrows :: SynParser SynExpr
+synexprArrows = 
+    let arrowparser =
+            do arrow <- synlex LexArrow
+               ident <- synident
+               return (getpos arrow, ident)
+        buildexpr locexpr (loc, locident) =
+            mklocated loc (SynArrow locexpr locident)
+     in do expr <- synexprUnit
+           accs <- many arrowparser
+           return $ foldl buildexpr expr accs
+
+
 -- | Binary operator syntactic parser
 synexprBinOp :: LexToken -- ^operator lexical token
              -> (LocSynExpr -> LocSynExpr -> SynExpr) -- ^ binary expression constructor
@@ -592,7 +607,6 @@ opUnL ltok stok = Prefix (synexprUnOp ltok stok)
 -- | Operator table, by precedence order
 synoptable :: OperatorTable [PosLexToken] () Identity LocSynExpr
 synoptable = [ -- highest precedence
-              [ opBinL LexArrow SynArrow ],
               [ opBinR LexExp SynExp ],
               [ opUnL LexMinus SynNeg
               , opUnL LexBitNot SynBitNot ],
@@ -621,16 +635,10 @@ synoptable = [ -- highest precedence
               [ opBinL LexOr SynOr ]
              ] -- lowest precedence
 
--- About arrow operator in expressions:
--- altough is should be modeled as an ->ident posfix
--- operator, parsec do not support two unary operators
--- in sequence. Therefore, it is a binary operator,
--- and structure verification must happen in latter
--- processing stages.
 
 -- | Expression syntactic parser
 synexpr :: SynParser SynExpr
-synexpr = buildExpressionParser synoptable synexprUnit
+synexpr = buildExpressionParser synoptable synexprArrows
 
 -- | Syntactic constructs 
 -- | and SynParser for module
