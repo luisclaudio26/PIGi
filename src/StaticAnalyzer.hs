@@ -14,7 +14,8 @@ import Types
 -- identifiers altogether with its type (and 
 -- any other information that might be useful).
 data STEntry = Variable { getVarId :: String    -- identifier
-                        , getVarType :: String }  -- type
+                        , getVarType :: String  -- type
+                        , getVarLevel :: Int }  -- scope level
              | Function { getFuncName :: String
                         , getFuncArgTypes :: [String]
                         , getFuncRetTypes :: [String] } 
@@ -63,7 +64,7 @@ stFromModStmts st (h:t) = let result = stFromModStmt st h in
 stFromModStmt :: SuperTable -> SynModStmt -> Either String SuperTable
 stFromModStmt st s = case s of
                             (SynModStruct stct) -> stFromStruct st (ignorepos stct)
-                            (SynModDef def) -> stFromDef st (ignorepos def)
+                            (SynModDef def) -> stFromDef st 0 (ignorepos def)
                             (SynModProc proc) -> stFromProc st (ignorepos proc)
                             (SynModFunc func) -> stFromFunc st (ignorepos func)
 
@@ -75,18 +76,10 @@ stFromStruct st stct = let n = getlabel $ ignorepos $ getSynStructName stct in
                                       where newTypeTable = newEntry : (snd st)
                                             newEntry = StructEntry (getlabel $ ignorepos $ getSynStructName stct)
                                                                    ([])
-                                                                  
 
-{-
-stFieldsFromTypedIdent :: [SynTypedIdent] -> [Field]
-stFieldsFromTypedIdent [] = []
-stFieldsFromTypedIdent (h:t) = field : (stFieldsFromTypedIdent t)
-                                where field = Field (getlabel $ ignorepos getTypedIdentName h)
-                                                    (getTypedIdentType h)
--}
-
-stFromDef :: SuperTable -> SynDef -> Either String SuperTable
-stFromDef st  (SynDef typedId) = stFromTypedIdentList st  typedId
+-- PENDING !!! [LUÍS] O nível não necessariamente é zero!
+stFromDef :: SuperTable -> Int -> SynDef -> Either String SuperTable
+stFromDef st lvl (SynDef typedId) = stFromTypedIdentList st lvl typedId
 
 stFromProc :: SuperTable -> SynProc -> Either String SuperTable
 stFromProc st  (SynProc name formalParam block) = let n = getlabel $ ignorepos name in
@@ -96,7 +89,6 @@ stFromProc st  (SynProc name formalParam block) = let n = getlabel $ ignorepos n
                                                                 where syt = entry : (fst st)
                                                                       entry = Procedure (getlabel $ ignorepos name)
                                                                                         (buildProcTypeStr formalParam)
-                                                                                          
 
 stFromFunc :: SuperTable -> SynFunc -> Either String SuperTable
 stFromFunc st  (SynFunc name formalParam ret block) = let n = getlabel $ ignorepos name in
@@ -121,15 +113,16 @@ buildProcTypeStr formalParam = (getlabel . ignorepos . getTypeIdent . ignorepos 
 
 -- TODO: Code for entry is to big; maybe we could create some 
 -- helper functions to make it smaller.
-stFromTypedIdentList :: SuperTable -> [SynTypedIdent] -> Either String SuperTable
-stFromTypedIdentList st [] = Right st
-stFromTypedIdentList st (h:t) = let name = getlabel $ ignorepos $ getTypedIdentName h in
+stFromTypedIdentList :: SuperTable -> Int -> [SynTypedIdent] -> Either String SuperTable
+stFromTypedIdentList st lvl [] = Right st
+stFromTypedIdentList st lvl (h:t) = let name = getlabel $ ignorepos $ getTypedIdentName h in
                                         if isElemUserTypeTable name (snd st) || isElemSymbolTable name (fst st)
                                             then Left "Name already being used as a type name or variable name." 
-                                            else stFromTypedIdentList (newST, snd st) t
+                                            else stFromTypedIdentList (newST, snd st) lvl t
                                                   where newST = entry : (fst st)
                                                         entry = Variable (getlabel $ ignorepos $ getTypedIdentName h) 
-                                                                         (getLabelFromType $ ignorepos $ getTypedIdentType h) 
+                                                                         (getLabelFromType $ ignorepos $ getTypedIdentType h)
+                                                                          lvl
                                                                          
 
 isElemUserTypeTable :: String -> [UTEntry] -> Bool
@@ -145,7 +138,7 @@ isElemUserTypeTable s (h:t) = case h of
 isElemSymbolTable :: String  -> [STEntry] -> Bool
 isElemSymbolTable s [] = False
 isElemSymbolTable s (h:t) = case h of 
-                                Variable name _ -> if name == s 
+                                Variable name _ _ -> if name == s 
                                                       then True
                                                       else isElemSymbolTable s t 
                                 Function name _ _ -> if name == s
@@ -218,22 +211,22 @@ checkModStmt st stmt = case stmt of
                                       Left msg -> Left msg
 
 checkFunc :: SuperTable -> Located SynFunc -> Either String SynFunc
-checkFunc st func = case checkBlock st $ getFuncBlock unlocFunc of
+checkFunc st func = case checkBlock st 1 $ getFuncBlock unlocFunc of
                         Right _ -> Right unlocFunc
                         Left msg -> Left msg
                       where unlocFunc = ignorepos func
 
 checkProc :: SuperTable -> Located SynProc -> Either String SynProc
-checkProc st proc = case checkBlock st $ getProcBlock unlocProc of
+checkProc st proc = case checkBlock st 1 $ getProcBlock unlocProc of
                     Right _ -> Right unlocProc
                     Left msg -> Left msg
                   where unlocProc = ignorepos proc
 
-checkBlock :: SuperTable -> Located SynBlock -> Either String SynBlock
-checkBlock st block = case checkedStmts of
-                      Right _ -> Right $ ignorepos block
-                      Left msg -> Left msg
-                    where checkedStmts = checkStmts st $ ignorepos `fmap` getStmts (ignorepos block)
+checkBlock :: SuperTable -> Int -> Located SynBlock -> Either String SynBlock
+checkBlock st _ block = case checkedStmts of
+                          Right _ -> Right $ ignorepos block
+                          Left msg -> Left msg
+                        where checkedStmts = checkStmts st $ ignorepos `fmap` getStmts (ignorepos block)
 
 checkStmts :: SuperTable -> [SynStmt] -> Either String [SynStmt]
 checkStmts st [] = Right []
@@ -267,7 +260,7 @@ checkStmt st s = case s of
                                     Right newSt -> (Right s, newSt)
                                     Left msg -> (Left msg, st)
                                   where 
-                                    eitherNewSt = stFromDef st def
+                                    eitherNewSt = stFromDef st 0 def -- PENDING! Statement must carry scope level
                                     def = ignorepos sd
 
 --trocar: naao é s1 == s2, levar em conta o "_" 
@@ -305,10 +298,11 @@ identType (syt, utt) si@(SynIdent s) = case t1 of
                                       where t1 = searchSymbolTable syt s
                                             t2 = searchUserTypeTable utt s
 
+-- PENDING !!! [LUÍS] Verificar o nível do símbolo ao buscar
 searchSymbolTable :: [STEntry] -> String -> Either String String
 searchSymbolTable [] s = Left "Variable not defined."
 searchSymbolTable (h:t) s = case h of 
-                                Variable name vtype -> if name == s
+                                Variable name vtype _ -> if name == s
                                                           then Right vtype
                                                           else searchSymbolTable t s
                                 _ -> searchSymbolTable t s
@@ -566,7 +560,7 @@ findFuncRetTypes (h:t) s = case h of
                             Procedure name _ -> if name == s
                                                     then Left "Can't call a procedure in an attribution (no return value)."
                                                     else findFuncRetTypes t s
-                            Variable name _ -> if name == s
+                            Variable name _ _ -> if name == s
                                                     then Left "Function not defined." 
                                                     else findFuncRetTypes t s
 
