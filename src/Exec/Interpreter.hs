@@ -6,6 +6,7 @@ import Exec.Native
 import Types
 import Syntactic
 import PosParsec
+import Data.List (elemIndex)
 
 
 -- = Expressions
@@ -32,6 +33,27 @@ evalBin comp expr1 expr2 =
        comp v1 v2
 
 
+-- | Execution of struct value extraction
+obtStructVal :: LocSynExpr -> LocSynExpr -> Exec Val
+obtStructVal locstexpr locidexpr =
+    do let stexpr = ignorepos locstexpr
+           idexpr = ignorepos locidexpr
+           extrNames (StructType _ ts) = map fst ts
+       case idexpr of
+         (SynIdentExpr locident) ->
+             do let idname = getName locident
+                stval <- evalExpr locstexpr
+                case stval of
+                  (StructVal sttype vals) ->
+                      let ns = extrNames sttype
+                          idx = elemIndex idname ns
+                       in case idx of
+                            Just i -> return $ vals !! i
+                            Nothing -> error "field not found"
+                  _ -> error "can't access non-structure"
+         _ -> error "invalid arrow operator usage"
+
+
 -- | Execution to evaluate expression
 evalExpr :: (Located SynExpr) -> Exec Val
 evalExpr = eval . ignorepos
@@ -51,6 +73,8 @@ evalExpr = eval . ignorepos
                  return $ getVarValue var
 
           eval (SynCallExpr loccall) = fmap head $ callFunc loccall
+
+          eval (SynArrow e1 e2) = obtStructVal e1 e2
 
           eval (SynPar e) = evalExpr e
           eval (SynExp e1 e2) = evalBin expVal e1 e2
@@ -217,6 +241,16 @@ registerRets rets =
      in mapM_ regVar rets
 
 
+-- == Structures
+
+-- | Create constructor function for structure
+mkConstr :: Type -> Func
+mkConstr st@(StructType name ents) = NativeFunc name ftype constr
+    where argtypes = map snd ents
+          ftype = FuncType [st] argtypes
+          constr vals = return $ [StructVal st vals]
+
+
 -- == Procedures
 
 -- | Execute procedure
@@ -286,7 +320,11 @@ loadModuleSymbols mod = mapM_ loadSymbol (modStmts mod)
         loadSymbol (SynModFunc locfunc) = 
             registerFunc $ Func $ ignorepos locfunc
 
-        loadSymbol (SynModStruct locstruct) = return ()
+        loadSymbol (SynModStruct locstruct) =
+            do let sttype = toType locstruct
+               registerStruct sttype
+               registerFunc $ mkConstr sttype
+
         
 
 -- | Module execution
