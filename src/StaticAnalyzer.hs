@@ -17,10 +17,11 @@ data STEntry = Variable { getVarId :: String    -- identifier
                         , getVarType :: String  -- type
                         , getVarMod :: String }  -- module where it was defined 
              | Function { getFuncName :: String
-                        , getFuncType :: String
+                        , getFuncArgTypes :: [String]
+                        , getFuncRetTypes :: [String]
                         , getFuncMod :: String } 
              | Procedure { getProcName :: String
-                         , getProcType :: String
+                         , getProcArgTypes :: [String]
                          , getProcMod :: String} deriving (Show)
 
 type SymbolTable = [STEntry]
@@ -70,9 +71,6 @@ stFromModStmt st id s = case s of
                             (SynModProc proc) -> stFromProc st id (ignorepos proc)
                             (SynModFunc func) -> stFromFunc st id (ignorepos func)
 
-
--- TODO: We can still define a struct with a name that was already used by
--- a variable. Check that after!
 stFromStruct :: SuperTable -> String -> SynStruct -> Either String SuperTable 
 stFromStruct st modid stct = let n = getlabel $ ignorepos $ getSynStructName stct in
                                 if isElemUserTypeTable n modid (snd st) || isElemSymbolTable n modid (fst st)
@@ -111,18 +109,18 @@ stFromFunc st modid (SynFunc name formalParam ret block) = let n = getlabel $ ig
                                                                 else Right (syt, (snd st))
                                                                         where syt = entry : (fst st)
                                                                               entry = Function (getlabel $ ignorepos name)
-                                                                                               (buildFuncTypeStr formalParam ret)
+                                                                                               (buildFuncArgTypeList formalParam)
+                                                                                               (buildFuncRetTypeList ret)
                                                                                                modid
 
-buildFuncTypeStr :: [SynTypedIdent] -> [SynTypedIdent] -> String
-buildFuncTypeStr formalParam ret = fp ++ "->" ++ rv
-                                    where
-                                        fp = show (getTypedIdentType `fmap` formalParam)
-                                        rv = show (getTypedIdentType `fmap` ret)
+buildFuncArgTypeList :: [SynTypedIdent] -> [String]
+buildFuncArgTypeList formalParam = (getlabel . ignorepos . getTypeIdent . ignorepos . getTypedIdentType) `fmap` formalParam
+                                        
+buildFuncRetTypeList :: [SynTypedIdent] -> [String]
+buildFuncRetTypeList ret = (getlabel . ignorepos . getTypeIdent . ignorepos . getTypedIdentType) `fmap` ret
 
-buildProcTypeStr :: [SynTypedIdent] -> String
-buildProcTypeStr formalParam = show (getTypedIdentType `fmap` formalParam)
-
+buildProcTypeStr :: [SynTypedIdent] -> [String]
+buildProcTypeStr formalParam = (getlabel . ignorepos . getTypeIdent . ignorepos . getTypedIdentType) `fmap` formalParam
 
 
 -- TODO: Code for entry is to big; maybe we could create some 
@@ -154,7 +152,7 @@ isElemSymbolTable s m (h:t) = case h of
                                 Variable name _ modid -> if modid == m && name == s 
                                                           then True
                                                           else isElemSymbolTable s m t 
-                                Function name _ modid -> if modid == m && name == s
+                                Function name _ _ modid -> if modid == m && name == s
                                                           then True
                                                           else isElemSymbolTable s m t
                                 Procedure name _ modid -> if modid == m && name == s
@@ -197,57 +195,368 @@ semModule' (rule:tail) x  = (semModule' tail x) >>= rule -}
 -- Haskell compiler does.
 --
 checkMod :: SynModule -> Either String SynModule
-checkMod (SynModule id stmts) = case checkModStmts stmts of
-                                  Right _ -> Right (SynModule id stmts)
-                                  Left msg -> Left msg
+checkMod sm@(SynModule id stmts) = case stFromModule ([], typeTable) sm of
+                                    Left msg -> Left msg
+                                    Right st -> case checkModStmts st stmts of
+                                                  Right _ -> Right (SynModule id stmts)
+                                                  Left msg -> Left msg
 
-checkModStmts :: [SynModStmt] -> Either String [SynModStmt]
-checkModStmts [] = Right []
-checkModStmts (stmt:tail) = case checkedStmt of
+checkModStmts :: SuperTable -> [SynModStmt] -> Either String [SynModStmt]
+checkModStmts st [] = Right []
+checkModStmts st (stmt:tail) = case checkedStmt of
                             Left msg -> Left msg
                             Right _ -> do x <- checkedStmt
-                                          y <- checkModStmts tail
+                                          y <- checkModStmts st tail
                                           Right (x : y)
-                          where checkedStmt = checkModStmt stmt
+                          where checkedStmt = checkModStmt st stmt
 
-checkModStmt :: SynModStmt -> Either String SynModStmt
-checkModStmt stmt = case stmt of
+checkModStmt :: SuperTable -> SynModStmt -> Either String SynModStmt
+checkModStmt st stmt = case stmt of
                   SynModStruct ss -> Right stmt    -- No rule for structs nor def's (so far)
                   SynModDef sd -> Right stmt
-                  SynModProc sp -> case checkProc sp of
+                  SynModProc sp -> case checkProc st sp of
                                       Right _ -> Right stmt
                                       Left msg -> Left msg
-                  SynModFunc sf -> checkFunc sf
+                  SynModFunc sf -> checkFunc st sf
 
-checkFunc :: Located SynFunc -> Either String SynModStmt -- PENDING
-checkFunc func = Right $ SynModFunc func 
+checkFunc :: SuperTable -> Located SynFunc -> Either String SynModStmt -- PENDING
+checkFunc st func = Right $ SynModFunc func 
 
-checkProc :: Located SynProc -> Either String SynProc
-checkProc proc = case checkBlock $ getProcBlock unlocProc of
+checkProc :: SuperTable -> Located SynProc -> Either String SynProc
+checkProc st proc = case checkBlock st $ getProcBlock unlocProc of
                     Right _ -> Right unlocProc
                     Left msg -> Left msg
                   where unlocProc = ignorepos proc
 
-checkBlock :: Located SynBlock -> Either String SynBlock
-checkBlock block = case checkedStmts of
+checkBlock :: SuperTable -> Located SynBlock -> Either String SynBlock
+checkBlock st block = case checkedStmts of
                       Right _ -> Right $ ignorepos block
                       Left msg -> Left msg
-                    where checkedStmts = checkStmts $ ignorepos `fmap` getStmts (ignorepos block)
+                    where checkedStmts = checkStmts st $ ignorepos `fmap` getStmts (ignorepos block)
 
-checkStmts :: [SynStmt] -> Either String [SynStmt]
-checkStmts [] = Right []
-checkStmts (stmt:tail) = case checkedStmt of
+checkStmts :: SuperTable -> [SynStmt] -> Either String [SynStmt]
+checkStmts st [] = Right []
+checkStmts st (stmt:tail) = case checkedStmt of
                             Left msg -> Left msg
                             Right _ -> do h <- checkedStmt
-                                          t <- checkStmts tail
+                                          t <- checkStmts st tail
                                           Right (h:t)
-                          where checkedStmt = checkStmt stmt
+                          where checkedStmt = checkStmt st stmt
 
-checkStmt :: SynStmt -> Either String SynStmt -- PENDING
-checkStmt s = case s of
+checkStmt :: SuperTable -> SynStmt -> Either String SynStmt -- PENDING
+checkStmt st s = case s of
                 SynStmtDef sd -> Right s
-                SynStmtAttr sa -> Left "TODO: Check attributions."
+                SynStmtAttr sa -> let a@(SynAttr l1 l2) = ignorepos sa in
+                                    if length l1 /= length l2
+                                      then Left "Different number of identifiers and expressions in attribution."
+                                      else case (checkAttr st a) of
+                                              Left msg -> Left msg
+                                              Right _ -> Right s 
                 SynStmtDefAttr sda -> Right s
                 SynStmtIf si -> Right s
                 SynStmtWhile sw -> Right s
                 SynStmtCall sc -> Right s
+
+--trocar: naao é s1 == s2, levar em conta o "_" 
+checkAttr :: SuperTable -> SynAttr -> Either String SynAttr
+checkAttr st sa@(SynAttr si se) = case buildIdentTypeList st (ignorepos `fmap` si) of
+                                    Left msg -> Left msg
+                                    Right s1 -> case buildExprTypeList st (ignorepos `fmap` se) of
+                                                  Left msg -> Left msg
+                                                  Right s2 -> if s1 == s2
+                                                                then Right sa
+                                                                else Left "Variable and expression have different types in attribution."
+           
+buildIdentTypeList :: SuperTable -> [SynIdent] -> Either String [String]
+buildIdentTypeList st [] = Right []
+buildIdentTypeList st (h:t) = case identType st h of
+                                Left msg -> Left msg
+                                Right s -> case buildIdentTypeList st t of
+                                            Left msg -> Left msg
+                                            Right l -> Right $ s : l
+
+buildExprTypeList :: SuperTable -> [SynExpr] -> Either String [String]
+buildExprTypeList st [] = Right []
+buildExprTypeList st (h:t) = case checkExpr st h of
+                                Left msg -> Left msg
+                                Right s -> case buildExprTypeList st t of
+                                            Left msg -> Left msg
+                                            Right l -> Right $ s ++ l
+
+identType :: SuperTable -> SynIdent -> Either String String
+identType (syt, utt) si@(SynIdent s) = case t1 of
+                                        Right vtype -> Right vtype
+                                        Left _ -> case t2 of
+                                                        Right ftype -> Right ftype
+                                                        Left msg -> Left msg
+                                      where t1 = searchSymbolTable syt s
+                                            t2 = searchUserTypeTable utt s
+
+searchSymbolTable :: [STEntry] -> String -> Either String String
+searchSymbolTable [] s = Left "Variable not defined."
+searchSymbolTable (h:t) s = case h of 
+                                Variable name vtype _ -> if name == s
+                                                          then Right vtype
+                                                          else searchSymbolTable t s
+                                _ -> searchSymbolTable t s
+
+-- search for the type of the variable in a struct
+searchUserTypeTable :: [UTEntry] -> String -> Either String String
+searchUserTypeTable utt s = Left "Variable not defined."
+
+checkExpr :: SuperTable -> SynExpr -> Either String [String]
+checkExpr st se = case se of
+                  SynIdentExpr e -> case identType st $ ignorepos e of
+                                      Left msg -> Left msg
+                                      Right vtype -> Right $ vtype : []
+                  SynLitIntExpr _ -> Right $ "int" : []
+                  SynLitFloatExpr _ -> Right $ "float" : []
+                  SynLitBoolExpr _ -> Right $ "bool" : []
+                  SynCallExpr e -> case findFuncRetTypes (fst st) $ getlabel $ ignorepos $ getFuncId $ ignorepos e of
+                                      Left msg -> Left msg
+                                      Right ftype -> Right ftype
+                  SynPar e -> checkExpr st $ ignorepos e
+                  SynNeg e -> case checkExpr st $ ignorepos e of
+                                Left msg -> Left msg
+                                Right l -> if l == ["int"] || l == ["float"]
+                                              then Right l
+                                              else Left "Operator '-' (unary) expects an operand of type int or float."
+                  SynBitNot e -> case checkExpr st $ ignorepos e of
+                                Left msg -> Left msg
+                                Right l -> if l == ["int"]
+                                            then Right l
+                                            else Left "Operator '!' expects an operand of type int."
+                  SynNot e -> case checkExpr st $ ignorepos e of
+                                Left msg -> Left msg
+                                Right l -> if l == ["bool"]
+                                            then Right l
+                                            else Left "Operator 'not' expects an operand of type bool."
+                  SynExp e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                    Left msg -> Left msg
+                                    Right l1 -> if l1 == ["int"] || l1 == ["float"]
+                                                  then case checkExpr st $ ignorepos e2 of
+                                                          Left msg -> Left msg
+                                                          Right l2 -> if l2 == ["int"] || l2 == ["float"]
+                                                                        then if l1 == l2
+                                                                                then Right l1
+                                                                                else Left "Operator '^' expects operands of equal types."
+                                                                        else Left "Operator '^' expects operands of type int or float."
+                                                  else Left "Operator '^' expects operands of type int or float."
+                  SynTimes e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                    Left msg -> Left msg
+                                    Right l1 -> if l1 == ["int"] || l1 == ["float"]
+                                                  then case checkExpr st $ ignorepos e2 of
+                                                          Left msg -> Left msg
+                                                          Right l2 -> if l2 == ["int"] || l2 == ["float"]
+                                                                        then if l1 == l2
+                                                                                then Right l1
+                                                                                else Left "If the first operand is of type int or float, operator '*' expects second operator of same type."
+                                                                        else Left "If the first operand is of type int or float, operator '*' expects second operator of type int or float."
+                                                  else if l1 == ["vec"] || l1 == ["vec2"] || l1 == ["vec3"] || l1 == ["vec4"] 
+                                                          then case checkExpr st $ ignorepos e2 of
+                                                                  Left msg -> Left msg
+                                                                  Right l2 -> if l2 == ["int"] || l2 == ["float"]
+                                                                                then Right l1
+                                                                                else if l2 == ["mat"] || l2 == ["mat2"] || l2 == ["mat3"] || l2 == ["mat4"]
+                                                                                        then Right ["vec"]
+                                                                                        else Left "Operands of wrong types."
+                                                          else if l1 /= ["bool"]
+                                                                  then case checkExpr st $ ignorepos e2 of
+                                                                        Left msg -> Left msg
+                                                                        Right l2 -> if l2 == ["int"] || l2 == ["float"]
+                                                                                      then Right l1
+                                                                                      else if l2 == ["vec"] || l2 == ["vec2"] || l2 == ["vec3"] || l2 == ["vec4"] 
+                                                                                              then Right ["mat"]
+                                                                                              else Left "Operands of wrong types."
+                                                                  else Left "Operator '*' expects operands of type int, float, vec or mat."
+                  SynDiv e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                    Left msg -> Left msg
+                                    Right l1 -> if l1 == ["int"] || l1 == ["float"]
+                                                  then case checkExpr st $ ignorepos e2 of
+                                                          Left msg -> Left msg
+                                                          Right l2 -> if l2 == ["int"] || l2 == ["float"]
+                                                                        then if l1 == l2
+                                                                                then Right l1
+                                                                                else Left "If the first operand is of type int or float, operator '/' expects second operator of same type."
+                                                                        else Left "If the first operand is of type int or float, operator '/' expects second operator of type int or float."
+                                                  else if l1 /= ["bool"]
+                                                          then case checkExpr st $ ignorepos e2 of
+                                                                  Left msg -> Left msg
+                                                                  Right l2 -> if l2 == ["int"] || l2 == ["float"]
+                                                                                then Right l1 
+                                                                                else Left "If the first operand is of type vec or mat, operator '/' expects second operator of type int or float."
+                                                          else Left "Operator '/' expects operands of type int, float, vec or mat."
+                  SynMod e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                    Left msg -> Left msg
+                                    Right l1 -> if l1 == ["int"] || l1 == ["float"]
+                                                  then case checkExpr st $ ignorepos e2 of
+                                                          Left msg -> Left msg
+                                                          Right l2 -> if l2 == ["int"] || l2 == ["float"]
+                                                                        then if l1 == l2
+                                                                                then Right l1
+                                                                                else Left "Operator 'mod' expects operands of equal types."
+                                                                        else Left "Operator 'mod' expects operands of type int or float."
+                                                  else Left "Operator 'mod' expects operands of type int or float."
+                  SynPlus e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                    Left msg -> Left msg
+                                    Right l1 -> if l1 /= ["bool"]
+                                                  then case checkExpr st $ ignorepos e2 of
+                                                          Left msg -> Left msg
+                                                          Right l2 -> if l2 /= ["bool"]
+                                                                        then if l1 == l2
+                                                                                then Right l1
+                                                                                else Left "Operator '+' expects operands of equal types."
+                                                                        else Left "Operator '+' expects operands of type int, float, vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
+                                                  else Left "Operator '+' expects operands of type int, float, vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
+                  SynMinus e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                    Left msg -> Left msg
+                                    Right l1 -> if l1 /= ["bool"]
+                                                  then case checkExpr st $ ignorepos e2 of
+                                                          Left msg -> Left msg
+                                                          Right l2 -> if l2 /= ["bool"]
+                                                                        then if l1 == l2
+                                                                                then Right l1
+                                                                                else Left "Operator '-' (binary) expects operands of equal types."
+                                                                        else Left "Operator '-' (binary) expects operands of type int, float, vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
+                                                  else Left "Operator '-' (binary) expects operands of type int, float, vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
+                  SynDotTimes e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                        Left msg -> Left msg
+                                        Right l1 -> if l1 /= ["int"] && l1 /= ["float"] && l1 /= ["bool"]
+                                                      then case checkExpr st $ ignorepos e2 of
+                                                              Left msg -> Left msg
+                                                              Right l2 -> if l2 /= ["int"] && l2 /= ["float"] && l2 /= ["bool"]
+                                                                            then if l1 == l2
+                                                                                    then Right l1
+                                                                                    else Left "Operator '.*.' expects operands of equal types."
+                                                                            else Left "Operator '.*.' expects operands of type vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
+                                                      else Left "Operator '.*.' expects operands of type vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
+                  SynDotDiv e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                        Left msg -> Left msg
+                                        Right l1 -> if l1 /= ["int"] && l1 /= ["float"] && l1 /= ["bool"]
+                                                      then case checkExpr st $ ignorepos e2 of
+                                                              Left msg -> Left msg
+                                                              Right l2 -> if l2 /= ["int"] && l2 /= ["float"] && l2 /= ["bool"]
+                                                                            then if l1 == l2
+                                                                                    then Right l1
+                                                                                    else Left "Operator './.' expects operands of equal types."
+                                                                            else Left "Operator './.' expects operands of type vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
+                                                      else Left "Operator './.' expects operands of type vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
+                  SynDot e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                        Left msg -> Left msg
+                                        Right l1 -> if l1 /= ["int"] && l1 /= ["float"] && l1 /= ["bool"]
+                                                      then case checkExpr st $ ignorepos e2 of
+                                                              Left msg -> Left msg
+                                                              Right l2 -> if l2 /= ["int"] && l2 /= ["float"] && l2 /= ["bool"]
+                                                                            then if l1 == l2
+                                                                                    then Right l1
+                                                                                    else Left "Operator '.' expects operands of equal types."
+                                                                            else Left "Operator '.' expects operands of type vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
+                                                      else Left "Operator '.' expects operands of type vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
+                  SynRShift e1 e2 -> Left ""
+                  SynLShift e1 e2 -> Left ""
+                  SynBitAnd e1 e2 -> Left ""  
+                  SynBitXor e1 e2 -> Left ""  
+                  SynBitOr e1 e2 -> Left "" 
+                  SynEQ e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                    Left msg -> Left msg
+                                    Right l1 -> case checkExpr st $ ignorepos e2 of
+                                                          Left msg -> Left msg
+                                                          Right l2 -> if l1 == l2
+                                                                        then Right ["bool"]
+                                                                        else Left "Operator '==' expects operands of equal types." 
+                  SynNEQ e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                    Left msg -> Left msg
+                                    Right l1 -> case checkExpr st $ ignorepos e2 of
+                                                          Left msg -> Left msg
+                                                          Right l2 -> if l1 == l2
+                                                                        then Right ["bool"]
+                                                                        else Left "Operator '=/=' expects operands of equal types." 
+                  SynLT e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                    Left msg -> Left msg
+                                    Right l1 -> if l1 == ["int"] || l1 == ["float"]
+                                                  then case checkExpr st $ ignorepos e2 of
+                                                          Left msg -> Left msg
+                                                          Right l2 -> if l2 == ["int"] || l2 == ["float"]
+                                                                        then if l1 == l2
+                                                                                then Right ["bool"]
+                                                                                else Left "Operator '<' expects operands of equal types."
+                                                                        else Left "Operator '<' expects operands of type int or float."
+                                                  else Left "Operator '<' expects operands of type int or float."    
+                  SynLE e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                    Left msg -> Left msg
+                                    Right l1 -> if l1 == ["int"] || l1 == ["float"]
+                                                  then case checkExpr st $ ignorepos e2 of
+                                                          Left msg -> Left msg
+                                                          Right l2 -> if l2 == ["int"] || l2 == ["float"]
+                                                                        then if l1 == l2
+                                                                                then Right ["bool"]
+                                                                                else Left "Operator '<=' expects operands of equal types."
+                                                                        else Left "Operator '<=' expects operands of type int or float."
+                                                  else Left "Operator '<=' expects operands of type int or float."     
+                  SynGT e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                    Left msg -> Left msg
+                                    Right l1 -> if l1 == ["int"] || l1 == ["float"]
+                                                  then case checkExpr st $ ignorepos e2 of
+                                                          Left msg -> Left msg
+                                                          Right l2 -> if l2 == ["int"] || l2 == ["float"]
+                                                                        then if l1 == l2
+                                                                                then Right ["bool"]
+                                                                                else Left "Operator '>' expects operands of equal types."
+                                                                        else Left "Operator '>' expects operands of type int or float."
+                                                  else Left "Operator '>' expects operands of type int or float."    
+                  SynGE e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                    Left msg -> Left msg
+                                    Right l1 -> if l1 == ["int"] || l1 == ["float"]
+                                                  then case checkExpr st $ ignorepos e2 of
+                                                          Left msg -> Left msg
+                                                          Right l2 -> if l2 == ["int"] || l2 == ["float"]
+                                                                        then if l1 == l2
+                                                                                then Right ["bool"]
+                                                                                else Left "Operator '>=' expects operands of equal types."
+                                                                        else Left "Operator '>=' expects operands of type int or float."
+                                                  else Left "Operator '>=' expects operands of type int or float."  
+                  SynAnd e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                    Left msg -> Left msg
+                                    Right l1 -> if l1 == ["bool"]
+                                                  then case checkExpr st $ ignorepos e2 of
+                                                          Left msg -> Left msg
+                                                          Right l2 -> if l2 == ["bool"]
+                                                                        then Right l1
+                                                                        else Left "Operator 'and' expects operands of type bool."
+                                                  else Left "Operator 'and' expects operands of type bool."  
+                  SynXor e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                    Left msg -> Left msg
+                                    Right l1 -> if l1 == ["bool"]
+                                                  then case checkExpr st $ ignorepos e2 of
+                                                          Left msg -> Left msg
+                                                          Right l2 -> if l2 == ["bool"]
+                                                                        then Right l1
+                                                                        else Left "Operator 'xor' expects operands of type bool."
+                                                  else Left "Operator 'xor' expects operands of type bool."  
+                  SynOr e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                    Left msg -> Left msg
+                                    Right l1 -> if l1 == ["bool"]
+                                                  then case checkExpr st $ ignorepos e2 of
+                                                          Left msg -> Left msg
+                                                          Right l2 -> if l2 == ["bool"]
+                                                                        then Right l1
+                                                                        else Left "Operator 'or' expects operands of type bool."
+                                                  else Left "Operator 'or' expects operands of type bool."    
+                  
+
+findFuncRetTypes :: [STEntry] -> String -> Either String [String]
+findFuncRetTypes [] s = Left "Function not defined."
+findFuncRetTypes (h:t) s = case h of
+                            Function name _ list _ -> if name == s
+                                                        then Right list
+                                                        else findFuncRetTypes t s
+                            Procedure name _ _ -> if name == s
+                                                    then Left "Can't call a procedure in an attribution (no return value)."
+                                                    else findFuncRetTypes t s
+                            Variable name _ _ -> if name == s
+                                                    then Left "Function not defined." 
+                                                    else findFuncRetTypes t s
+
+
+
+
