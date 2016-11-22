@@ -29,12 +29,14 @@ instance Show Val where
     show (BoolVal b) = if b then "true" else "false"
     show (StructVal (StructType n ts) vals) =
         n ++ " {" ++ show vals ++ "}"
+    show None = "NONE"
         
 
 instance Typed Val where
     toType (IntVal _) = IntType
     toType (FloatVal _) = FloatType
     toType (BoolVal _) = BoolType
+    toType (StructVal t _) = t
     toType None = NoneType
 
 
@@ -284,7 +286,7 @@ findProc :: String -> Type -> Exec Proc
 findProc procname proctype =
     do procs <- obtainProcTable
        let matchname = (==procname) . getName
-           matchtype = (==proctype) . toType
+           matchtype = (similar proctype) . toType
            proc = find (\s -> matchname s && matchtype s) procs
        case proc of
          Just p -> return p
@@ -304,7 +306,7 @@ findFunc :: String -> [Type] -> Exec Func
 findFunc funcname argtypes =
     do funcs <- obtainFuncTable
        let matchname = (==funcname) . getName
-           matchtype = (funcSim $ FuncType [] argtypes) . toType
+           matchtype = (similar $ FuncType [] argtypes) . toType
            func = find (\f -> matchname f && matchtype f) funcs
        case func of
          Just d -> return d
