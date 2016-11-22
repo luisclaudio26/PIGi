@@ -122,22 +122,21 @@ instance Typed SynTypedIdent where
 instance Named SynTypedIdent where
     getName = getName . getTypedIdentName
 
--- x, y, z : int into x: int, y: int, z: int
-synSingleTypeIdentList :: SynSpecParser [SynTypedIdent]
-synSingleTypeIdentList = do var <- fmap getidentlist synidentlist
-                            synlex LexColon
-                            vartype <- syntype
-                            let f t i = SynTypedIdent i t
-                            return $ fmap (f vartype) var
+synTypedIdentL :: SynSpecParser [SynTypedIdent]
+synTypedIdentL = do var <- fmap getidentlist synidentlist
+                    synlex LexColon
+                    vartype <- syntype
+                    let f t i = SynTypedIdent i t
+                    return $ fmap (f vartype) var
 
 -- Parsec s u m [SynTypedIdent]
 
 -- | Syntactic construct for typed identifier list
-data SynTypedIdentList = SynTypedIdentList { gettypedidentlist :: [[SynTypedIdent]] }
+data SynTypedIdentList = SynTypedIdentList { gettypedidentlist :: [SynTypedIdent] }
 
 -- | SynParser for list of identifiers
 synTypedIdentList :: SynSpecParser SynTypedIdentList
-synTypedIdentList = fmap SynTypedIdentList (synSingleTypeIdentList `sepBy` (synlex LexSemicolon))
+synTypedIdentList = fmap (SynTypedIdentList . concat) (synTypedIdentL `sepBy` (synlex LexComma))
 
 
 -----------------------------------------FORMAL TYPE: TEMPLATE USE-------------------------------------
@@ -215,7 +214,7 @@ synstruct = locate $
      i <- fmap gettypedidentlist synTypedIdentList -- case ttype != nothing: i <- fmap getcoupleidentlist synCoupleIdentList 
      synlex LexRParen
      synlex LexSemicolon
-     return $ SynStruct formalParam name (collapseList i)
+     return $ SynStruct formalParam name i
 
 instance Typed SynStruct where
     toType (SynStruct _ n tis) = StructType (getName n) (map extr tis)
@@ -223,7 +222,6 @@ instance Typed SynStruct where
 
 instance Named SynStruct where
     getName (SynStruct _ n _) = getName n
-
 
 -- = Definitions
 
@@ -235,7 +233,7 @@ data SynDef = SynDef { getDefTypedIdents :: [SynTypedIdent]
 syndef :: SynParser SynDef
 syndef = locate $ 
   do synlex LexDef
-     vartyped <- synSingleTypeIdentList 
+     vartyped <- synTypedIdentL
      synlex LexSemicolon
      return $ SynDef vartyped
 -- = Attribution
@@ -245,17 +243,36 @@ syndef = locate $
 -- | Syntactic construct for attribution 
 data SynAttr = SynAttr { getAttrVars :: [Located SynIdent]
                        , getAttrExprs :: [Located SynExpr]
-                       } deriving (Show)
+                       } 
+             | SynOpAttr { getAttrVar :: (Located SynIdent)
+                          ,getAttrExpr :: (Located SynExpr) 
+                         } deriving (Show)
 
 -- | SynParser for attribution
 -- TODO: accept to struct. Example: `p = (4.0, 2.0, 1.0);`
 synattr :: SynParser SynAttr
 synattr = locate $
   do var <- fmap getidentlist synidentlist
-     synlex LexAttr -- <|> synlex LexPlusAttr <|> synlex LexMinusAttr <|> synlex LexTimesAttr <|> synlex LexDivAttr
-     value <- fmap getexprlist synexprlist 
+     stok <- synlex LexAttr
+     value <- fmap getexprlist synexprlist
      synlex LexSemicolon
      return $ SynAttr var value
+
+     -- | SynParser for attribution
+synopattr :: SynParser SynAttr
+synopattr = locate $
+  do var <- synident
+     stok <- synlex LexPlusAttr <|> synlex LexMinusAttr <|> synlex LexTimesAttr <|> synlex LexDivAttr
+     expr <- synexpr
+     synlex LexSemicolon
+     return $ SynOpAttr var $
+       let varexpr =  mklocated (getpos var) (SynIdentExpr var)
+           stokPos = mklocated (getpos stok)
+        in case ignorepos stok of 
+             (SynToken LexPlusAttr)  -> stokPos (SynPlus varexpr expr)
+             (SynToken LexMinusAttr) -> stokPos (SynMinus varexpr expr)
+             (SynToken LexTimesAttr) -> stokPos (SynTimes varexpr expr)
+             (SynToken LexDivAttr)   -> stokPos(SynDiv varexpr expr)
 
 -- = Definition and attribution
 -- | Syntactic construct for definition & attribution
@@ -266,7 +283,7 @@ data SynDefAttr = SynDefAttr [SynTypedIdent] [Located SynExpr] deriving (Show)
 syndefattr :: SynParser SynDefAttr
 syndefattr = locate $
   do synlex LexDef
-     vartyped <- synSingleTypeIdentList
+     vartyped <- synTypedIdentL
      synlex LexAttr
      value <- fmap getexprlist synexprlist
      synlex LexSemicolon
@@ -280,6 +297,7 @@ data SynStmt = SynStmtDef (Located SynDef)
              | SynStmtIf (Located SynIf)
              | SynStmtWhile (Located SynWhile)
              | SynStmtCall (Located SynCall)
+             | SynStmtFor (Located SynFor)
 
 instance Show SynStmt where
     show (SynStmtDef  x) = show x ++ "\n"
@@ -287,14 +305,20 @@ instance Show SynStmt where
     show (SynStmtIf x) = show x ++ "\n"
     show (SynStmtWhile x) = show x ++ "\n"
     show (SynStmtCall x) = show x ++ "\n"
-
+    show (SynStmtDefAttr x) = show x ++ "\n"
+    show (SynStmtFor x) = show x ++ "\n"
 
 synstmt :: SynParser SynStmt
-synstmt = locate $ fmap SynStmtDef syndef 
+synstmt = locate $ try (fmap SynStmtDef syndef) 
+               <|> fmap SynStmtDefAttr syndefattr
                <|> try (fmap SynStmtCall synpcall)
-               <|> fmap SynStmtAttr synattr
+               <|> try (fmap SynStmtAttr synattr)
+               <|> fmap SynStmtAttr synopattr
                <|> fmap SynStmtIf synifstr 
                <|> fmap SynStmtWhile synwhile
+               <|> try (fmap SynStmtFor synfor)
+               <|> fmap SynStmtFor synforp
+
 
 -- | Syntactic construct for block
 data SynBlock = SynBlock { getStmts :: [Located SynStmt] } deriving (Show)
@@ -364,9 +388,8 @@ synwhile = locate $
 
 -- == for
 -- | Syntactic construct for 'for'
-data SynFor = SynFor
-            | SynForNP (Located SynIdent) (Located SynExpr) (Located SynBlock)
-            | SynForP [Located SynIdent] (Located SynExpr) (Located SynBlock) deriving (Show)
+data SynFor = SynForNP (Located SynIdent) (Located SynExpr) (Located SynBlock)
+            | SynForP [Located SynIdent] [Located SynExpr] (Located SynBlock) deriving (Show)
 
 -- | SynParser for 'for'
 synfor :: SynParser SynFor
@@ -388,13 +411,9 @@ synforp = locate $
   do synlex LexFor
      i <- fmap getidentlist synidentlist
      synlex LexParallel
-     expr <- synexpr
+     expr <- fmap getexprlist synexprlist
      content <- synblock
      return $ SynForP i expr content
-
-collapseList::[[SynTypedIdent]] -> [SynTypedIdent]
-collapseList [] = []
-collapseList (h:t) = h ++ (collapseList t)
 
 -- | Syntactic construct for 'proc'
 data SynProc = SynProc { getProcIdent :: (Located SynIdent)
@@ -418,7 +437,7 @@ synproc = locate $
      i <- fmap gettypedidentlist synTypedIdentList
      synlex LexRParen
      content <- synblock
-     return $ SynProc name (collapseList i) content
+     return $ SynProc name i content
 
 getProcName :: SynProc -> String
 getProcName p = getlabel . ignorepos . getProcIdent $ p
@@ -454,7 +473,8 @@ synfunc = locate $
      i <- fmap gettypedidentlist synTypedIdentList -- fmap getcoupleidentlist synCoupleIdentList
      synlex LexRParen
      content <- synblock
-     return $ SynFunc name ttype (collapseList i) (collapseList argsreturn) content
+     return $ SynFunc name ttype i argsreturn content
+
 
 -- | Syntactic construct for expression list
 data SynExprList = SynExprList { getexprlist :: [Located SynExpr] }
