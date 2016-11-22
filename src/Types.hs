@@ -72,19 +72,35 @@ instance (Typed a) => TypedList [a] where
     toTypeList = map toType
 
 
+
+-- = Compatibility
+-- Two types are compatible if they are equivalent
+-- with respect to parameter passing
+
+-- | Tests if two types are compatible
+compatible :: Type -> Type -> Bool
+compatible (NamedType n1) (StructType n2 _) = n1 == n2
+compatible (StructType n1 _) (NamedType n2) = n1 == n2
+compatible (ProcType ts1) (ProcType ts2) =
+     and $ zipWith compatible ts1 ts2
+compatible (FuncType rts1 ats1) (FuncType rts2 ats2) =
+    let comp2 = zipWith compatible
+     in and (comp2 rts1 rts2) && and (comp2 ats1 ats2)
+compatible t1 t2 = t1 == t2
+
+
 -- = Similarity
 -- Two types are similar if it is not possible
 -- to exist overloaded objects with both signatures,
 -- that is, the interpreter can distinguish them using
 -- available contextual information.
 
--- | Check if types are functional similar
--- Two types are functional similar if
---   1. both are function types
---   2. their argument list is of the same type
-funcSim :: Type -> Type -> Bool
-funcSim (FuncType _ ts1) (FuncType _ ts2) = ts1 == ts2
-funcSim _ _ = False
-
+-- | Check if types are similar
+similar :: Type -> Type -> Bool
+similar (ProcType ts1) (ProcType ts2) =
+    and $ zipWith compatible ts1 ts2
+similar (FuncType _ ats1) (FuncType _ ats2) =
+    and $ zipWith compatible ats1 ats2
+similar _ _ = False
 
 

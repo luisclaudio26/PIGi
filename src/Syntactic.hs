@@ -53,8 +53,7 @@ getLabelFromType :: SynType -> String
 getLabelFromType t = getlabel . ignorepos . getTypeIdent $ t
 
 -- | Syntactic construct for type 
-data SynType = SynType
-             | SynTypeNGen{ getTypeIdent :: (Located SynIdent)}
+data SynType = SynTypeNGen{ getTypeIdent :: (Located SynIdent)}
              | SynTypeGen { getTypeIdent :: (Located SynIdent)
                           , getTypeArgs  :: (Located SynTypeList) }deriving (Show)
 
@@ -217,6 +216,14 @@ synstruct = locate $
      synlex LexRParen
      synlex LexSemicolon
      return $ SynStruct formalParam name (collapseList i)
+
+instance Typed SynStruct where
+    toType (SynStruct _ n tis) = StructType (getName n) (map extr tis)
+        where extr ti = (getName ti, toType ti)
+
+instance Named SynStruct where
+    getName (SynStruct _ n _) = getName n
+
 
 -- = Definitions
 
@@ -491,6 +498,7 @@ data SynExpr = SynIdentExpr (Located SynIdent)
              | SynLitFloatExpr (Located SynLitFloat)
              | SynLitBoolExpr (Located SynLitBool)
              | SynCallExpr (Located SynCall)
+             | SynArrow    LocSynExpr LocSynExpr
              | SynPar      LocSynExpr
              | SynExp      LocSynExpr LocSynExpr
              | SynNeg      LocSynExpr
@@ -530,6 +538,7 @@ parenUn op x = "(" ++ op ++ show x ++ ")"
 
 instance Show SynExpr where
     show (SynPar x)        = paren x
+    show (SynArrow x y)    = parenBin "->" x y
     show (SynExp x y)      = parenBin "^" x y
     show (SynNeg x)        = parenUn "-" x
     show (SynBitNot x)     = parenUn "!" x
@@ -643,6 +652,7 @@ opUnL ltok stok = Prefix (synexprUnOp ltok stok)
 -- | Operator table, by precedence order
 synoptable :: OperatorTable [PosLexToken] () Identity LocSynExpr
 synoptable = [ -- highest precedence
+              [ opBinL LexArrow SynArrow ],
               [ opBinR LexExp SynExp ],
               [ opUnL LexMinus SynNeg
               , opUnL LexBitNot SynBitNot ],
@@ -671,6 +681,12 @@ synoptable = [ -- highest precedence
               [ opBinL LexOr SynOr ]
              ] -- lowest precedence
 
+-- About arrow operator in expressions:
+-- altough is should be modeled as an ->ident posfix
+-- operator, parsec do not support two unary operators
+-- in sequence. Therefore, it is a binary operator,
+-- and structure verification must happen in latter
+-- processing stages.
 
 -- | Expression syntactic parser
 synexpr :: SynParser SynExpr
