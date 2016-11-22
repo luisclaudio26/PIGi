@@ -217,10 +217,15 @@ checkModStmt st stmt = case stmt of
                   SynModProc sp -> case checkProc st sp of
                                       Right _ -> Right stmt
                                       Left msg -> Left msg
-                  SynModFunc sf -> checkFunc st sf
+                  SynModFunc sf -> case checkFunc st sf of
+                                      Right _ -> Right stmt
+                                      Left msg -> Left msg
 
-checkFunc :: SuperTable -> Located SynFunc -> Either String SynModStmt -- PENDING
-checkFunc st func = Right $ SynModFunc func 
+checkFunc :: SuperTable -> Located SynFunc -> Either String SynFunc
+checkFunc st func = case checkBlock st $ getFuncBlock unlocFunc of
+                        Right _ -> Right unlocFunc
+                        Left msg -> Left msg
+                      where unlocFunc = ignorepos func
 
 checkProc :: SuperTable -> Located SynProc -> Either String SynProc
 checkProc st proc = case checkBlock st $ getProcBlock unlocProc of
