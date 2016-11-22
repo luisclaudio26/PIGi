@@ -14,15 +14,12 @@ import Types
 -- identifiers altogether with its type (and 
 -- any other information that might be useful).
 data STEntry = Variable { getVarId :: String    -- identifier
-                        , getVarType :: String  -- type
-                        , getVarMod :: String }  -- module where it was defined 
+                        , getVarType :: String }  -- type
              | Function { getFuncName :: String
                         , getFuncArgTypes :: [String]
-                        , getFuncRetTypes :: [String]
-                        , getFuncMod :: String } 
+                        , getFuncRetTypes :: [String] } 
              | Procedure { getProcName :: String
-                         , getProcArgTypes :: [String]
-                         , getProcMod :: String} deriving (Show)
+                         , getProcArgTypes :: [String] } deriving (Show)
 
 type SymbolTable = [STEntry]
 
@@ -30,8 +27,7 @@ data Field = Field { getFieldName :: String
                    , getFieldType :: String } deriving (Show)
 
 data UTEntry = StructEntry { getStructName :: String     -- Type name
-                          , getStructFields :: [Field]  -- List of fields defined inside this struct
-                          , getStructMod :: String }     -- module where it was defined
+                          , getStructFields :: [Field] } -- List of fields defined inside this struct
              | Primitive { getPrimName :: String } deriving (Show)
 
 typeTable :: UserTypeTable
@@ -54,32 +50,32 @@ type SuperTable = (SymbolTable, UserTypeTable)
 -- TODO: We should receive a SynProgram, which is
 -- itself a set of SynModules
 stFromModule :: SuperTable -> SynModule -> Either String SuperTable 
-stFromModule st ( SynModule id stmts ) = stFromModStmts st (getlabel $ ignorepos id) stmts 
+stFromModule st ( SynModule id stmts ) = stFromModStmts st stmts 
 
-stFromModStmts :: SuperTable -> String -> [SynModStmt] -> Either String SuperTable
-stFromModStmts st id [] = Right st
-stFromModStmts st id (h:t) = let result = stFromModStmt st id h in
+stFromModStmts :: SuperTable -> [SynModStmt] -> Either String SuperTable
+stFromModStmts st [] = Right st
+stFromModStmts st (h:t) = let result = stFromModStmt st h in
                              case result of
                                 Left errorMsg  -> Left errorMsg
-                                Right newSt -> stFromModStmts newSt id t
+                                Right newSt -> stFromModStmts newSt t
 
 
-stFromModStmt :: SuperTable -> String -> SynModStmt -> Either String SuperTable
-stFromModStmt st id s = case s of
-                            (SynModStruct stct) -> stFromStruct st id (ignorepos stct)
-                            (SynModDef def) -> stFromDef st id (ignorepos def)
-                            (SynModProc proc) -> stFromProc st id (ignorepos proc)
-                            (SynModFunc func) -> stFromFunc st id (ignorepos func)
+stFromModStmt :: SuperTable -> SynModStmt -> Either String SuperTable
+stFromModStmt st s = case s of
+                            (SynModStruct stct) -> stFromStruct st (ignorepos stct)
+                            (SynModDef def) -> stFromDef st (ignorepos def)
+                            (SynModProc proc) -> stFromProc st (ignorepos proc)
+                            (SynModFunc func) -> stFromFunc st (ignorepos func)
 
-stFromStruct :: SuperTable -> String -> SynStruct -> Either String SuperTable 
-stFromStruct st modid stct = let n = getlabel $ ignorepos $ getSynStructName stct in
-                                if isElemUserTypeTable n modid (snd st) || isElemSymbolTable n modid (fst st)
+stFromStruct :: SuperTable -> SynStruct -> Either String SuperTable 
+stFromStruct st stct = let n = getlabel $ ignorepos $ getSynStructName stct in
+                                if isElemUserTypeTable n (snd st) || isElemSymbolTable n (fst st)
                                   then Left "Name already being used as a type name or variable name."
                                   else Right (fst st, newTypeTable)
                                       where newTypeTable = newEntry : (snd st)
                                             newEntry = StructEntry (getlabel $ ignorepos $ getSynStructName stct)
                                                                    ([])
-                                                                   modid
+                                                                  
 
 {-
 stFieldsFromTypedIdent :: [SynTypedIdent] -> [Field]
@@ -89,29 +85,29 @@ stFieldsFromTypedIdent (h:t) = field : (stFieldsFromTypedIdent t)
                                                     (getTypedIdentType h)
 -}
 
-stFromDef :: SuperTable -> String -> SynDef -> Either String SuperTable
-stFromDef st modid (SynDef typedId) = stFromTypedIdentList st modid typedId
+stFromDef :: SuperTable -> SynDef -> Either String SuperTable
+stFromDef st  (SynDef typedId) = stFromTypedIdentList st  typedId
 
-stFromProc :: SuperTable -> String -> SynProc -> Either String SuperTable
-stFromProc st modid (SynProc name formalParam block) = let n = getlabel $ ignorepos name in
-                                                          if isElemUserTypeTable n modid (snd st) || isElemSymbolTable n modid (fst st)
+stFromProc :: SuperTable -> SynProc -> Either String SuperTable
+stFromProc st  (SynProc name formalParam block) = let n = getlabel $ ignorepos name in
+                                                          if isElemUserTypeTable n  (snd st) || isElemSymbolTable n  (fst st)
                                                             then Left "Name already being used as a type name or variable name."
                                                             else Right (syt, (snd st))
                                                                 where syt = entry : (fst st)
                                                                       entry = Procedure (getlabel $ ignorepos name)
                                                                                         (buildProcTypeStr formalParam)
-                                                                                        modid  
+                                                                                          
 
-stFromFunc :: SuperTable -> String -> SynFunc -> Either String SuperTable
-stFromFunc st modid (SynFunc name formalParam ret block) = let n = getlabel $ ignorepos name in
-                                                              if isElemUserTypeTable n modid (snd st) || isElemSymbolTable n modid (fst st)
-                                                                then Left "Name already being used as a type name or variable name."
-                                                                else Right (syt, (snd st))
-                                                                        where syt = entry : (fst st)
-                                                                              entry = Function (getlabel $ ignorepos name)
-                                                                                               (buildFuncArgTypeList formalParam)
-                                                                                               (buildFuncRetTypeList ret)
-                                                                                               modid
+stFromFunc :: SuperTable -> SynFunc -> Either String SuperTable
+stFromFunc st  (SynFunc name formalParam ret block) = let n = getlabel $ ignorepos name in
+                                                        if isElemUserTypeTable n (snd st) || isElemSymbolTable n  (fst st)
+                                                        then Left "Name already being used as a type name or variable name."
+                                                        else Right (syt, (snd st))
+                                                                where syt = entry : (fst st)
+                                                                      entry = Function (getlabel $ ignorepos name)
+                                                                                       (buildFuncArgTypeList formalParam)
+                                                                                       (buildFuncRetTypeList ret)
+                                                                                               
 
 buildFuncArgTypeList :: [SynTypedIdent] -> [String]
 buildFuncArgTypeList formalParam = (getlabel . ignorepos . getTypeIdent . ignorepos . getTypedIdentType) `fmap` formalParam
@@ -125,39 +121,39 @@ buildProcTypeStr formalParam = (getlabel . ignorepos . getTypeIdent . ignorepos 
 
 -- TODO: Code for entry is to big; maybe we could create some 
 -- helper functions to make it smaller.
-stFromTypedIdentList :: SuperTable -> String -> [SynTypedIdent] -> Either String SuperTable
-stFromTypedIdentList st modid [] = Right st
-stFromTypedIdentList st modid (h:t) = let name = getlabel $ ignorepos $ getTypedIdentName h in
-                                        if isElemUserTypeTable name modid (snd st) || isElemSymbolTable name modid (fst st)
+stFromTypedIdentList :: SuperTable -> [SynTypedIdent] -> Either String SuperTable
+stFromTypedIdentList st [] = Right st
+stFromTypedIdentList st (h:t) = let name = getlabel $ ignorepos $ getTypedIdentName h in
+                                        if isElemUserTypeTable name (snd st) || isElemSymbolTable name (fst st)
                                             then Left "Name already being used as a type name or variable name." 
-                                            else stFromTypedIdentList (newST, snd st) modid t
+                                            else stFromTypedIdentList (newST, snd st) t
                                                   where newST = entry : (fst st)
                                                         entry = Variable (getlabel $ ignorepos $ getTypedIdentName h) 
                                                                          (getLabelFromType $ ignorepos $ getTypedIdentType h) 
-                                                                         modid 
+                                                                         
 
-isElemUserTypeTable :: String -> String -> [UTEntry] -> Bool
-isElemUserTypeTable s m [] = False
-isElemUserTypeTable s m (h:t) = case h of 
-                                StructEntry name _ modid -> if modid == m && name == s 
-                                                              then True
-                                                              else isElemUserTypeTable s m t 
+isElemUserTypeTable :: String -> [UTEntry] -> Bool
+isElemUserTypeTable s [] = False
+isElemUserTypeTable s (h:t) = case h of 
+                                StructEntry name _ -> if name == s 
+                                                        then True
+                                                        else isElemUserTypeTable s t 
                                 Primitive name -> if name == s
                                                     then True
-                                                    else isElemUserTypeTable s m t
+                                                    else isElemUserTypeTable s t
 
-isElemSymbolTable :: String -> String -> [STEntry] -> Bool
-isElemSymbolTable s m [] = False
-isElemSymbolTable s m (h:t) = case h of 
-                                Variable name _ modid -> if modid == m && name == s 
-                                                          then True
-                                                          else isElemSymbolTable s m t 
-                                Function name _ _ modid -> if modid == m && name == s
-                                                          then True
-                                                          else isElemSymbolTable s m t
-                                Procedure name _ modid -> if modid == m && name == s
-                                                            then True
-                                                            else isElemSymbolTable s m t
+isElemSymbolTable :: String  -> [STEntry] -> Bool
+isElemSymbolTable s [] = False
+isElemSymbolTable s (h:t) = case h of 
+                                Variable name _ -> if name == s 
+                                                      then True
+                                                      else isElemSymbolTable s t 
+                                Function name _ _ -> if name == s
+                                                      then True
+                                                      else isElemSymbolTable s t
+                                Procedure name _ -> if name == s
+                                                      then True
+                                                      else isElemSymbolTable s t
 
 -----------------------------------
 --------- Static analyzer --------- TODO: Move this to another file when 
@@ -241,26 +237,38 @@ checkBlock st block = case checkedStmts of
 
 checkStmts :: SuperTable -> [SynStmt] -> Either String [SynStmt]
 checkStmts st [] = Right []
-checkStmts st (stmt:tail) = case checkedStmt of
+checkStmts st (stmt:tail) = case fst checkedStmt of
                             Left msg -> Left msg
-                            Right _ -> do h <- checkedStmt
-                                          t <- checkStmts st tail
+                            Right _ -> do h <- fst checkedStmt
+                                          t <- checkStmts (snd checkedStmt) tail
                                           Right (h:t)
                           where checkedStmt = checkStmt st stmt
 
-checkStmt :: SuperTable -> SynStmt -> Either String SynStmt -- PENDING
+-- TODO: [LUÍS] Isso é uma gambiarra horrorosa que teve de ser feita porque
+-- não lembrei que a tabela vai mudar dentro dos blocos. Com sorte o problema
+-- não vai se propagar. A ideia é que retornamos não só o Either mas também
+-- a tabela de símbolos atualizada, caso um Def tenha sido encontrado dentro
+-- da função. Essa tabela atualizada é a que é propagada pros statement 
+-- subsequentes. Tentei fazer o conserto mais rápido e menos danoso ao resto
+-- do código possível. Lembrar de consertar isso depois.
+checkStmt :: SuperTable -> SynStmt -> (Either String SynStmt, SuperTable)
 checkStmt st s = case s of
-                SynStmtDef sd -> Right s
                 SynStmtAttr sa -> let a@(SynAttr l1 l2) = ignorepos sa in
                                     if length l1 /= length l2
-                                      then Left "Different number of identifiers and expressions in attribution."
+                                      then (Left "Different number of identifiers and expressions in attribution.", st)
                                       else case (checkAttr st a) of
-                                              Left msg -> Left msg
-                                              Right _ -> Right s 
-                SynStmtDefAttr sda -> Right s
-                SynStmtIf si -> Right s
-                SynStmtWhile sw -> Right s
-                SynStmtCall sc -> Right s
+                                              Left msg -> (Left msg, st)
+                                              Right _ -> (Right s, st) 
+                SynStmtDefAttr sda -> (Right s, st)
+                SynStmtIf si -> (Right s, st)
+                SynStmtWhile sw -> (Right s, st)
+                SynStmtCall sc -> (Right s, st)
+                SynStmtDef sd -> case eitherNewSt of
+                                    Right newSt -> (Right s, newSt)
+                                    Left msg -> (Left msg, st)
+                                  where 
+                                    eitherNewSt = stFromDef st def
+                                    def = ignorepos sd
 
 --trocar: naao é s1 == s2, levar em conta o "_" 
 checkAttr :: SuperTable -> SynAttr -> Either String SynAttr
@@ -300,7 +308,7 @@ identType (syt, utt) si@(SynIdent s) = case t1 of
 searchSymbolTable :: [STEntry] -> String -> Either String String
 searchSymbolTable [] s = Left "Variable not defined."
 searchSymbolTable (h:t) s = case h of 
-                                Variable name vtype _ -> if name == s
+                                Variable name vtype -> if name == s
                                                           then Right vtype
                                                           else searchSymbolTable t s
                                 _ -> searchSymbolTable t s
@@ -552,13 +560,13 @@ checkExpr st se = case se of
 findFuncRetTypes :: [STEntry] -> String -> Either String [String]
 findFuncRetTypes [] s = Left "Function not defined."
 findFuncRetTypes (h:t) s = case h of
-                            Function name _ list _ -> if name == s
+                            Function name list _ -> if name == s
                                                         then Right list
                                                         else findFuncRetTypes t s
-                            Procedure name _ _ -> if name == s
+                            Procedure name _ -> if name == s
                                                     then Left "Can't call a procedure in an attribution (no return value)."
                                                     else findFuncRetTypes t s
-                            Variable name _ _ -> if name == s
+                            Variable name _ -> if name == s
                                                     then Left "Function not defined." 
                                                     else findFuncRetTypes t s
 
