@@ -40,10 +40,25 @@ instance Typed Val where
     toType None = NoneType
 
 
+-- == Memory
+
+type MemLoc = Int
+type RefCount = Int
+
+-- | Data Object
+data Obj = Obj { getObjAddr :: MemLoc
+               , getObjRefCount :: RefCount
+               , getObjValue :: Val
+               }
+
+setObjValue :: Obj -> Val -> Obj
+setObjValue (Obj addr rc val) val' = Obj addr rc val'
+
+
 -- | Variable
 data Var = Var { getVarName :: String 
                , getVarType :: Type
-               , getVarValue :: Val
+               , getVarAddr :: MemLoc
                , getVarScope :: Scope
                } deriving (Show)
 
@@ -80,21 +95,20 @@ instance Named Func where
     getName (Func sfunc) = getName sfunc
 
 
--- | Update variable value
-setVarValue :: Var -> Val -> Var
-setVarValue var val =
-    Var (getVarName var) (getVarType var) val (getVarScope var)
-
-
 -- | Update variable scope
 setVarScope :: Var -> Scope -> Var
 setVarScope var scope =
-    Var (getVarName var) (getVarType var) (getVarValue var) scope
+    Var (getVarName var) (getVarType var) (getVarAddr var) scope
 
 
+type VarTable = [Var]
 type StructTable = [Type]
 type ProcTable = [Proc]
 type FuncTable = [Func]
+
+data MemTable = MemTable { getNextAddr :: MemLoc
+                         , getMemObjs :: [Obj]
+                         }
 
 -- | Program State
 data ProgramState =
@@ -102,12 +116,13 @@ data ProgramState =
           , getStructTable :: StructTable -- ^ Struct table
           , getProcTable :: ProcTable -- ^ Procedure table
           , getFuncTable :: FuncTable -- ^ Function table
+          , getMemTable :: MemTable -- ^ Memory objects
           }
 
 
 -- | Initial program state
 newProgramState :: ProgramState
-newProgramState = State [] [] [] []
+newProgramState = State [] [] [] [] (MemTable 0 [])
 
 
 -- = Execution monad
@@ -193,7 +208,8 @@ modifyVarTable vt = mkExec $
     \state -> let st = getStructTable state
                   pt = getProcTable state
                   ft = getFuncTable state
-               in return (State vt st pt ft)
+                  mt = getMemTable state
+               in return (State vt st pt ft mt)
 
 
 -- | Get current struct table
@@ -207,7 +223,8 @@ modifyStructTable st = mkExec $
     \state -> let vt = getVarTable state
                   pt = getProcTable state
                   ft = getFuncTable state
-               in return (State vt st pt ft)
+                  mt = getMemTable state
+               in return (State vt st pt ft mt)
 
 
 -- | Get current procedure table
@@ -221,7 +238,8 @@ modifyProcTable pt = mkExec $
     \state -> let vt = getVarTable state
                   st = getStructTable state
                   ft = getFuncTable state
-               in return (State vt st pt ft)
+                  mt = getMemTable state
+               in return (State vt st pt ft mt)
 
 
 -- | Get current function table
@@ -235,8 +253,22 @@ modifyFuncTable ft = mkExec $
     \state -> let vt = getVarTable state
                   st = getStructTable state
                   pt = getProcTable state
-               in return (State vt st pt ft)
+                  mt = getMemTable state
+               in return (State vt st pt ft mt)
 
+-- | Get current memory table
+obtainMemTable :: Exec MemTable
+obtainMemTable = mkEval $ return . getMemTable
+
+
+-- | Set current memory table
+modifyMemTable :: MemTable -> Exec ()
+modifyMemTable mt = mkExec $
+    \state -> let vt = getVarTable state
+                  st = getStructTable state
+                  pt = getProcTable state
+                  ft = getFuncTable state
+               in return (State vt st pt ft mt)
 
 
 -- = Auxiliary functions
@@ -254,10 +286,11 @@ runStatus :: Exec ()
 runStatus =
     do runPrintLn "status> "
        vt <- obtainVarTable
-       let pvar var = getName var ++ "=" ++ show (getVarValue var) ++ ", "
-       runPrintLn $ "vars: " ++ (concatMap pvar vt)
-       -- st <- obtainStructTable
-       -- runPrintLn $ "structs:" ++ (map show st)
+       let names = map getName vt
+       vals <- sequence $ map obtainVarValue names
+       let printv name val = name ++ "=" ++ show val ++ ", "
+       runPrintLn $ "vars: " ++ concat (zipWith printv names vals)
+
 
 -- == Struct table auxiliary functions
 
@@ -347,13 +380,31 @@ findVar varname =
 registerLocalVar :: String -> Type -> Val -> Exec ()
 registerLocalVar vname vtype vvalue =
     do vt <- obtainVarTable
-       modifyVarTable $ Var vname vtype vvalue (Local 0) : vt 
+       addr <- addObj vvalue
+       modifyVarTable $ Var vname vtype addr (Local 0) : vt 
 
 
 -- | Define local variable with no value
 registerLocalUndefVar :: String -> Type -> Exec ()
 registerLocalUndefVar vname vtype =
-    registerLocalVar vname vtype None 
+    registerLocalVar vname vtype None
+
+
+-- | Obtain variable value
+obtainVarValue :: String -> Exec Val
+obtainVarValue vname =
+    do var <- findVar vname
+       let addr = getVarAddr var
+       obj <- findObj addr
+       return $ getObjValue obj
+
+
+-- | Modify variable value
+modifyVarValue :: String -> Val -> Exec ()
+modifyVarValue vname val =
+    do var <- findVar vname
+       let addr = getVarAddr var
+       setValAt val addr
 
 
 -- | Increment scope level for local variables
@@ -390,7 +441,7 @@ saveAndClearScope =
 
 
 -- | Change variable value by name
-changeVar :: String -> Val -> Exec ()
+{-changeVar :: String -> Val -> Exec ()
 changeVar vname val =
     do vt <- obtainVarTable
        let vt' = updateWhen ((==vname) . getVarName) vt val
@@ -400,5 +451,35 @@ changeVar vname val =
         updateWhen cond (v:vs) value
           | cond v = setVarValue v value : vs
           | otherwise = v : updateWhen cond vs value
+-}
+
+-- == Memory table auxiliary functions
+
+findObj :: MemLoc -> Exec Obj
+findObj addr =
+    do mem <- obtainMemTable
+       let obj = find ((==addr) . getObjAddr) (getMemObjs mem)
+       case obj of
+         Just obj' -> return obj'
+         Nothing -> error $ "object at " ++ show addr ++ " not found"
 
 
+setValAt :: Val -> MemLoc -> Exec ()
+setValAt val addr =
+    do mem <- obtainMemTable
+       let changeObj obj =
+               if getObjAddr obj == addr
+                  then setObjValue obj val
+                  else obj
+           newObjs = map changeObj (getMemObjs mem)
+       modifyMemTable $ MemTable (getNextAddr mem) newObjs
+
+
+addObj :: Val -> Exec MemLoc
+addObj val =
+    do mem <- obtainMemTable
+       let addr = getNextAddr mem
+           objs = (Obj addr 1 val) : getMemObjs mem
+           nextAddr = addr + 1
+       modifyMemTable $ MemTable nextAddr objs
+       return addr

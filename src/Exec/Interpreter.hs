@@ -69,8 +69,7 @@ evalExpr = eval . ignorepos
               return $ BoolVal $ getbool . ignorepos $ locbool
 
           eval (SynIdentExpr locident) =
-              do var <- findVar . getlabel . ignorepos $ locident
-                 return $ getVarValue var
+              do obtainVarValue $ getName locident
 
           eval (SynCallExpr loccall) = fmap head $ callFunc loccall
 
@@ -179,7 +178,7 @@ runAttr locattr =
               (SynCallExpr loccall) ->
                   do vals <- callFunc loccall
                      let names = map (getlabel . ignorepos) locidents
-                     sequence_ $ zipWith changeVar names vals
+                     sequence_ $ zipWith modifyVarValue names vals
               _ -> distRunAttr locattr
        else distRunAttr locattr
 
@@ -194,7 +193,7 @@ distRunAttr locattr =
        runPrintLn $ "attr for " ++ show locidents
        vals <- mapM evalExpr locexprs
        let names = map (getlabel . ignorepos) locidents
-       sequence_ $ zipWith changeVar names vals
+       sequence_ $ zipWith modifyVarValue names vals
        runStatus
 
 
@@ -296,8 +295,7 @@ callFunc loccall =
                  registerRets (getFuncRet sf) 
                  runBlock $ getFuncBlock sf
                  let retNames = map getName $ getFuncRet sf
-                     extrVal vname = fmap getVarValue $ findVar vname
-                 mapM extrVal retNames
+                 mapM obtainVarValue retNames
            modifyVarTable vt
            return rets
 
