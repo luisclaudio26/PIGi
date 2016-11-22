@@ -96,21 +96,21 @@ instance Typed SynTypedIdent where
 instance Named SynTypedIdent where
     getName = getName . getTypedIdentName
 
-synSingleTypeIdentList :: SynSpecParser [SynTypedIdent]
-synSingleTypeIdentList = do var <- fmap getidentlist synidentlist
-                            synlex LexColon
-                            vartype <- syntype
-                            let f t i = SynTypedIdent i t
-                            return $ fmap (f vartype) var
+synTypedIdentL :: SynSpecParser [SynTypedIdent]
+synTypedIdentL = do var <- fmap getidentlist synidentlist
+                    synlex LexColon
+                    vartype <- syntype
+                    let f t i = SynTypedIdent i t
+                    return $ fmap (f vartype) var
 
 -- Parsec s u m [SynTypedIdent]
 
 -- | Syntactic construct for typed identifier list
-data SynTypedIdentList = SynTypedIdentList { gettypedidentlist :: [[SynTypedIdent]] }
+data SynTypedIdentList = SynTypedIdentList { gettypedidentlist :: [SynTypedIdent] }
 
 -- | SynParser for list of identifiers
 synTypedIdentList :: SynSpecParser SynTypedIdentList
-synTypedIdentList = fmap SynTypedIdentList (synSingleTypeIdentList `sepBy` (synlex LexSemicolon))
+synTypedIdentList = fmap (SynTypedIdentList . concat) (synTypedIdentL `sepBy` (synlex LexComma))
 
 -- | Syntactic construct for integer literal
 data SynLitInt = SynLitInt { getint :: Int } 
@@ -161,7 +161,7 @@ data SynDef = SynDef { getDefTypedIdents :: [SynTypedIdent]
 syndef :: SynParser SynDef
 syndef = locate $ 
   do synlex LexDef
-     vartyped <- synSingleTypeIdentList 
+     vartyped <- synTypedIdentL
      synlex LexSemicolon
      return $ SynDef vartyped
 -- = Attribution
@@ -209,7 +209,7 @@ data SynDefAttr = SynDefAttr [SynTypedIdent] [Located SynExpr] deriving (Show)
 syndefattr :: SynParser SynDefAttr
 syndefattr = locate $
   do synlex LexDef
-     vartyped <- synSingleTypeIdentList
+     vartyped <- synTypedIdentL
      synlex LexAttr
      value <- fmap getexprlist synexprlist
      synlex LexSemicolon
@@ -337,10 +337,6 @@ synforp = locate $
      content <- synblock
      return $ SynForP i expr content
 
-collapseList::[[SynTypedIdent]] -> [SynTypedIdent]
-collapseList [] = []
-collapseList (h:t) = h ++ (collapseList t)
-
 -- | Syntactic construct for 'struct'
 data SynStruct = SynStruct (Located SynIdent) [SynTypedIdent] deriving (Show)
 
@@ -354,7 +350,7 @@ synstruct = locate $
      i <- fmap gettypedidentlist synTypedIdentList
      synlex LexRParen
      synlex LexSemicolon
-     return $ SynStruct name (collapseList i)
+     return $ SynStruct name i
 
 instance Typed SynStruct where
     toType (SynStruct n tis) = StructType (getName n) (map extr tis)
@@ -386,7 +382,7 @@ synproc = locate $
      i <- fmap gettypedidentlist synTypedIdentList
      synlex LexRParen
      content <- synblock
-     return $ SynProc name (collapseList i) content
+     return $ SynProc name i content
 
 getProcName :: SynProc -> String
 getProcName p = getlabel . ignorepos . getProcIdent $ p
@@ -420,7 +416,7 @@ synfunc = locate $
      i <- fmap gettypedidentlist synTypedIdentList
      synlex LexRParen
      content <- synblock
-     return $ SynFunc name (collapseList i) (collapseList argsreturn) content
+     return $ SynFunc name i argsreturn content
 
 -- | Syntactic construct for expression list
 data SynExprList = SynExprList { getexprlist :: [Located SynExpr] }
