@@ -263,7 +263,6 @@ synopattr = locate $
 data SynDefAttr = SynDefAttr [SynTypedIdent] [Located SynExpr] deriving (Show)
 
 -- | SynParser for definition & attribution
--- TODO: accept `def p: point = (4.0, 2.0, 1.0);`
 syndefattr :: SynParser SynDefAttr
 syndefattr = locate $
   do synlex LexDef
@@ -282,6 +281,7 @@ data SynStmt = SynStmtDef (Located SynDef)
              | SynStmtWhile (Located SynWhile)
              | SynStmtCall (Located SynCall)
              | SynStmtFor (Located SynFor)
+             | SynStmtFunc (Located SynFunc)
 
 instance Show SynStmt where
     show (SynStmtDef  x) = show x ++ "\n"
@@ -291,6 +291,7 @@ instance Show SynStmt where
     show (SynStmtCall x) = show x ++ "\n"
     show (SynStmtDefAttr x) = show x ++ "\n"
     show (SynStmtFor x) = show x ++ "\n"
+    show (SynStmtFunc x) = show x ++ "\n"
 
 synstmt :: SynParser SynStmt
 synstmt = locate $ try (fmap SynStmtDef syndef) 
@@ -302,6 +303,7 @@ synstmt = locate $ try (fmap SynStmtDef syndef)
                <|> fmap SynStmtWhile synwhile
                <|> try (fmap SynStmtFor synfor)
                <|> fmap SynStmtFor synforp
+               <|> fmap SynStmtFunc synfunc
 
 
 -- | Syntactic construct for block
@@ -428,7 +430,7 @@ getProcName p = getlabel . ignorepos . getProcIdent $ p
 
 -- | Syntactic construct for 'func'
 data SynFunc = SynFunc { getFuncIdent :: (Located SynIdent) 
-                       , getTempType :: (Maybe (Located SynIdentList))
+                       , getTemplateType :: (Maybe (Located SynIdentList))
                        , getFuncArgs :: [SynTypedIdent]  
                        , getFuncRet :: [SynTypedIdent]
                        , getFuncBlock :: (Located SynBlock)
@@ -450,14 +452,14 @@ synfunc :: SynParser SynFunc
 synfunc = locate $
   do synlex LexFunc
      ttype <- fmap Just syntident <|> return Nothing
-     argsreturn <- fmap gettypedidentlist synTypedIdentList -- fmap getcoupleidentlist synCoupleIdentList
+     argsreturn <- fmap gettypedidentlist synTypedIdentList 
      synlex LexAttr
      name <- synident
      synlex LexLParen
-     i <- fmap gettypedidentlist synTypedIdentList -- fmap getcoupleidentlist synCoupleIdentList
+     argsparam <- fmap gettypedidentlist synTypedIdentList
      synlex LexRParen
      content <- synblock
-     return $ SynFunc name ttype i argsreturn content
+     return $ SynFunc name ttype argsparam argsreturn content
 
 
 -- | Syntactic construct for expression list
@@ -472,20 +474,23 @@ synexprlist = fmap SynExprList $ sepBy synexpr (synlex LexComma)
 
 -- | Syntactic construct for function/procedure call
 data SynCall = SynCall { getFuncId :: Located SynIdent
+                       , getTypeParam :: (Maybe (Located SynIdentList))
                        , getArgList :: SynExprList
                        }
 
 instance Show SynCall where
-    show (SynCall id list) = show id ++ "(" ++ show list ++ ")"
+    show (SynCall id Nothing list) = show id ++ "(" ++ show list ++ ")"
+    show (SynCall id (Just param) list) = show id ++ "<" ++ show param ++ "<(" ++ show list ++ ")"
 
 -- | SynParser for function call
 syncall :: SynParser SynCall
 syncall = locate $
     do fid <- synident
+       template <- fmap Just syntident <|> return Nothing
        synlex LexLParen
        exprs <- synexprlist
        synlex LexRParen
-       return $ SynCall fid exprs
+       return $ SynCall fid template exprs
 
 
 -- | SynParser for procedure call
