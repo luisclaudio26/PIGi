@@ -40,6 +40,9 @@ evalExpr = eval . ignorepos
           eval (SynLitIntExpr locint) =
               return $ IntVal $ getint . ignorepos $ locint
 
+          eval (SynLitFloatExpr locfloat) =
+              return . FloatVal . getfloat . ignorepos $ locfloat
+
           eval (SynLitBoolExpr locbool) =
               return $ BoolVal $ getbool . ignorepos $ locbool
 
@@ -50,6 +53,7 @@ evalExpr = eval . ignorepos
           eval (SynCallExpr loccall) = fmap head $ callFunc loccall
 
           eval (SynPar e) = evalExpr e
+          eval (SynExp e1 e2) = evalBin expVal e1 e2
           eval (SynNeg e) = evalUn negVal e
           eval (SynBitNot e) = evalUn bitNotVal e
           eval (SynTimes e1 e2) = evalBin timesVal e1 e2
