@@ -134,29 +134,13 @@ synTypedIdentL = do var <- fmap getidentlist synidentlist
 -- | Syntactic construct for typed identifier list
 data SynTypedIdentList = SynTypedIdentList { gettypedidentlist :: [SynTypedIdent] }
 
+
+instance TypedList SynTypedIdentList where
+  toTypeList = map toType . gettypedidentlist
+  
 -- | SynParser for list of identifiers
 synTypedIdentList :: SynSpecParser SynTypedIdentList
 synTypedIdentList = fmap (SynTypedIdentList . concat) (synTypedIdentL `sepBy` (synlex LexComma))
-
-
------------------------------------------FORMAL TYPE: TEMPLATE USE-------------------------------------
-data SynCoupleIdent = SynCoupleIdent { getIdentName :: (Located SynIdent)
-                                     , getFormalType :: (Located SynIdent) } deriving (Show)
--- x, y, z : t1 into x: t1, y: t1, z: t1
-synSingleCoupleIdentList :: SynSpecParser [SynCoupleIdent]
-synSingleCoupleIdentList = do var <- fmap getidentlist synidentlist
-                              synlex LexColon
-                              vartype <- synident
-                              let f t i = SynCoupleIdent i t
-                              return $ fmap (f vartype) var
-
--- | Syntactic construct for typed identifier list
-data SynCoupleIdentList = SynCoupleIdentList { getcoupleidentlist :: [[SynCoupleIdent]] }
-
--- | SynParser for list of  synCoupleIdentList
-synCoupleIdentList :: SynSpecParser SynCoupleIdentList
-synCoupleIdentList = fmap SynCoupleIdentList (synSingleCoupleIdentList `sepBy` (synlex LexSemicolon))
-------------------------------------------------------------------------------------------------------
 
 -- | Syntactic construct for integer literal
 data SynLitInt = SynLitInt { getint :: Int } 
@@ -211,7 +195,7 @@ synstruct = locate $
      name <- synident
      synlex LexAttr
      synlex LexLParen
-     i <- fmap gettypedidentlist synTypedIdentList -- case ttype != nothing: i <- fmap getcoupleidentlist synCoupleIdentList 
+     i <- fmap gettypedidentlist synTypedIdentList 
      synlex LexRParen
      synlex LexSemicolon
      return $ SynStruct formalParam name i
