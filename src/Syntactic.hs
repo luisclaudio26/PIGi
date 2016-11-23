@@ -278,10 +278,11 @@ data SynStmt = SynStmtDef (Located SynDef)
              | SynStmtAttr (Located SynAttr)
              | SynStmtDefAttr (Located SynDefAttr)
              | SynStmtIf (Located SynIf)
+             | SynStmtFor (Located SynFor)
              | SynStmtWhile (Located SynWhile)
              | SynStmtCall (Located SynCall)
-             | SynStmtFor (Located SynFor)
              | SynStmtFunc (Located SynFunc)
+             | SynStmtProc (Located SynProc)
 
 instance Show SynStmt where
     show (SynStmtDef  x) = show x ++ "\n"
@@ -292,6 +293,7 @@ instance Show SynStmt where
     show (SynStmtDefAttr x) = show x ++ "\n"
     show (SynStmtFor x) = show x ++ "\n"
     show (SynStmtFunc x) = show x ++ "\n"
+    show (SynStmtProc x) = show x ++ "\n"
 
 synstmt :: SynParser SynStmt
 synstmt = locate $ try (fmap SynStmtDef syndef) 
@@ -304,6 +306,7 @@ synstmt = locate $ try (fmap SynStmtDef syndef)
                <|> try (fmap SynStmtFor synfor)
                <|> fmap SynStmtFor synforp
                <|> fmap SynStmtFunc synfunc
+               <|> fmap SynStmtProc synproc
 
 
 -- | Syntactic construct for block
@@ -403,6 +406,7 @@ synforp = locate $
 
 -- | Syntactic construct for 'proc'
 data SynProc = SynProc { getProcIdent :: (Located SynIdent)
+                       , getProcTemplateType :: (Maybe (Located SynIdentList))
                        , getProcArgs ::  [SynTypedIdent]
                        , getProcBlock :: (Located SynBlock)
                        } deriving (Show)
@@ -418,12 +422,13 @@ instance Named SynProc where
 synproc :: SynParser SynProc
 synproc = locate $
   do synlex LexProc
+     ttype <- fmap Just syntident <|> return Nothing
      name <- synident
      synlex LexLParen
      i <- fmap gettypedidentlist synTypedIdentList
      synlex LexRParen
      content <- synblock
-     return $ SynProc name i content
+     return $ SynProc name ttype i content
 
 getProcName :: SynProc -> String
 getProcName p = getlabel . ignorepos . getProcIdent $ p
