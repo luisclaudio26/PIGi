@@ -67,12 +67,32 @@ readFloat [] =
        return [FloatVal $ read ln]
 
 
+roundFloat :: [Val] -> Exec [Val]
+roundFloat [FloatVal f] = return [IntVal $ round f]
+
+
+floorFloat :: [Val] -> Exec [Val]
+floorFloat [FloatVal f] = return [IntVal $ floor f]
+
+
+ceilFloat :: [Val] -> Exec [Val]
+ceilFloat [FloatVal f] = return [IntVal $ ceiling f]
+
+
+floatCast :: [Val] -> Exec [Val]
+floatCast [IntVal i] = return [FloatVal $ fromIntegral i]
+
+
 nativeFuncs :: [Func]
 nativeFuncs =
     [NativeFunc "rows" (FuncType [IntType] [MatType]) rows
     ,NativeFunc "cols" (FuncType [IntType] [MatType]) cols
     ,NativeFunc "readint" (FuncType [] [IntType]) readInt
     ,NativeFunc "readfloat" (FuncType [] [FloatType]) readFloat
+    ,NativeFunc "round" (FuncType [IntType] [FloatType]) roundFloat
+    ,NativeFunc "floor" (FuncType [IntType] [FloatType]) floorFloat
+    ,NativeFunc "ceil" (FuncType [IntType] [FloatType]) ceilFloat
+    ,NativeFunc "float" (FuncType [FloatType] [IntType]) floatCast
     ]
 
 
