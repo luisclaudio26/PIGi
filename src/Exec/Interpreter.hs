@@ -51,6 +51,15 @@ obtStructVal locstexpr locident =
          _ -> error "can't access non-structure"
 
 
+-- | Execution of matrix value extraction
+obtMatVal :: [[LocSynExpr]] -> Exec Val
+obtMatVal mat =
+    do vals <- mapM (mapM evalExpr) mat
+       let rows = length vals
+           cols = length $ head vals
+        in return $ MatVal rows cols vals
+
+
 -- | Execution to evaluate expression
 evalExpr :: (Located SynExpr) -> Exec Val
 evalExpr = eval . ignorepos
@@ -71,6 +80,8 @@ evalExpr = eval . ignorepos
           eval (SynCallExpr loccall) = fmap head $ callFunc loccall
 
           eval (SynArrow expr ident) = obtStructVal expr ident
+
+          eval (SynMat mat) = obtMatVal mat
 
           eval (SynPar e) = evalExpr e
           eval (SynExp e1 e2) = evalBin expVal e1 e2

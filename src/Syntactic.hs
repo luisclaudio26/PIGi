@@ -54,12 +54,8 @@ data SynType = SynType { getTypeIdent :: (Located SynIdent) }
 
 
 instance Typed SynType where
-    toType tp = let name = getlabel . ignorepos . getTypeIdent $ tp
-                 in case name of
-                     "int" -> IntType
-                     "bool" -> BoolType
-                     "float" -> FloatType
-                     name -> NamedType name
+    toType tp = strToType . getName . getTypeIdent $ tp
+
 
 {--
 This aux function it's temporary. LUIS: FIX.
@@ -488,6 +484,8 @@ data SynExpr = SynIdentExpr (Located SynIdent)
              | SynAnd      LocSynExpr LocSynExpr
              | SynXor      LocSynExpr LocSynExpr
              | SynOr       LocSynExpr LocSynExpr
+             | SynMat      [[LocSynExpr]]
+
 
 paren :: (Show a) => a -> String
 paren x = "(" ++ show x ++ ")"
@@ -532,6 +530,7 @@ instance Show SynExpr where
     show (SynLitFloatExpr lit) = show lit
     show (SynLitBoolExpr lit) = show lit
     show (SynCallExpr call) = show call
+    show (SynMat mat) = show mat
 
 type LocSynExpr = Located SynExpr
 
@@ -563,12 +562,26 @@ synexprPar = locate $
 synexprCall :: SynParser SynExpr
 synexprCall = locate $ fmap SynCallExpr syncall
 
+
+-- | Matrix/vector expression syntactic parser
+synexprMat :: SynParser SynExpr
+synexprMat =
+    let matrow = many synexpr
+        matrows = matrow `sepBy` synlex LexSemicolon
+     in locate $
+         do synlex LexLBracket
+            mat <- fmap SynMat matrows
+            synlex LexRBracket
+            return mat
+
+
 -- | High precedence expression unit parser
 synexprUnit :: SynParser SynExpr
 synexprUnit = synexprPar <|> synexprLitInt
                          <|> synexprLitFloat
                          <|> synexprLitBool
                          <|> try synexprCall
+                         <|> synexprMat
                          <|> synexprIdent
 
 

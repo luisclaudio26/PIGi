@@ -12,6 +12,7 @@ data Type = Placeholder String -- ^ template argument
           | BoolType
           | NamedType Name -- struct type, unbinded
           | StructType Name [(Name, Type)]
+          | MatType
           | ProcType ArgTypes
           | FuncType RetTypes ArgTypes
           | NoneType
@@ -19,6 +20,16 @@ data Type = Placeholder String -- ^ template argument
 
 type ArgTypes = [Type]
 type RetTypes = [Type]
+
+
+-- | Obtain type from string
+strToType :: String -> Type
+strToType "int" = IntType
+strToType "bool" = BoolType
+strToType "float" = FloatType
+strToType "mat" = MatType
+strToType name = NamedType name
+
 
 -- | List of all template arguments
 getPlaceholders :: Type -> [String]

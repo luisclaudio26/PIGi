@@ -1,6 +1,7 @@
 module Exec.Expr where
 
 import Data.Bits 
+import Control.Monad
 import Exec.Prim
 import PosParsec
 import Syntactic
@@ -16,6 +17,7 @@ expVal (FloatVal f1) (FloatVal f2) = return $ FloatVal $ f1 ** f2
 negVal :: Val -> Exec Val
 negVal (IntVal i) = return $ IntVal $ -i
 negVal (FloatVal f) = return $ FloatVal $ -f
+negVal (MatVal _ _ mat) = matUnOp negVal mat
 
 
 -- | Execution to invert all bits
@@ -47,12 +49,14 @@ modVal (FloatVal f1) (FloatVal f2) = return $ FloatVal $ f1 - f2 * (fromInteger 
 plusVal :: Val -> Val -> Exec Val
 plusVal (IntVal i1) (IntVal i2) = return $ IntVal $ i1 + i2
 plusVal (FloatVal f1) (FloatVal f2) = return $ FloatVal $ f1 + f2
+plusVal (MatVal _ _ mat1) (MatVal _ _ mat2) = matBinOp plusVal mat1 mat2
 
 
 -- | Execution to subtract two values
 minusVal :: Val -> Val -> Exec Val
 minusVal (IntVal i1) (IntVal i2) = return $ IntVal $ i1 - i2
 minusVal (FloatVal f1) (FloatVal f2) = return $ FloatVal $ f1 - f2
+minusVal (MatVal _ _ mat1) (MatVal _ _ mat2) = matBinOp minusVal mat1 mat2
 
 
 -- | Execution for @>>@
@@ -135,4 +139,23 @@ xorVal (BoolVal b1) (BoolVal b2) = return $ BoolVal $ (b1 && not b2) || (not b1 
 orVal :: Val -> Val -> Exec Val
 orVal (BoolVal b1) (BoolVal b2) = return $ BoolVal $ b1 || b2
 
+
+-- | Build a matrix from list of lists
+mkMat :: [[Val]] -> Val
+mkMat p = MatVal (length p) (length $ head p) p
+
+
+-- | Build matrix binary operation execution from scalar operation
+matUnOp :: (Val -> Exec Val) -- ^ scalar operation
+        -> [[Val]] -- ^ matrix
+        -> Exec Val
+matUnOp op mat = fmap mkMat $ mapM (mapM op) mat
+
+
+-- | Build matrix binary operation execution from scalar operation
+matBinOp :: (Val -> Val -> Exec Val) -- ^ scalar operation
+         -> [[Val]] -- ^ first matrix
+         -> [[Val]] -- ^ second matrix
+         -> Exec Val
+matBinOp op mat1 mat2 = fmap mkMat $ zipWithM (zipWithM op) mat1 mat2
 

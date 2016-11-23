@@ -19,6 +19,7 @@ data Val = IntVal Int
          | FloatVal Float
          | BoolVal Bool
          | StructVal Type [Val]
+         | MatVal Int Int [[Val]]
          | None
          deriving (Eq)
 
@@ -29,6 +30,7 @@ instance Show Val where
     show (BoolVal b) = if b then "true" else "false"
     show (StructVal (StructType n ts) vals) =
         n ++ " {" ++ show vals ++ "}"
+    show (MatVal _ _ mat) = show mat
     show None = "NONE"
         
 
@@ -37,6 +39,7 @@ instance Typed Val where
     toType (FloatVal _) = FloatType
     toType (BoolVal _) = BoolType
     toType (StructVal t _) = t
+    toType (MatVal _ _ _) = MatType
     toType None = NoneType
 
 
