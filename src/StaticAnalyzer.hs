@@ -3,6 +3,7 @@ module StaticAnalyzer where
 import Syntactic
 import PosParsec(ignorepos, Located)
 import Types
+import qualified Data.Text as T
 
 --------------------------------------
 --------- Build symbol table ---------
@@ -302,7 +303,27 @@ searchSymbolTable (h:t) s = case h of
 
 -- search for the type of the variable in a struct
 searchUserTypeTable :: [UTEntry] -> String -> Either String String
-searchUserTypeTable utt s = Left "Variable not defined."
+searchUserTypeTable [] s = Left "Variable not defined."
+searchUserTypeTable (h:t) s = case h of
+                                StructEntry name _ _ -> if name == s
+                                                          then Right $ "struct " ++ name
+                                                          else searchUserTypeTable t s
+                                _ -> searchUserTypeTable t s
+
+searchStructField :: [UTEntry] -> String -> String -> Either String [String]
+searchStructField [] struct field = Left "Variable not defined."
+searchStructField (h:t) struct field = case h of
+                                        StructEntry name l _ -> if name == struct
+                                                                    then structFieldType l field
+                                                                    else searchStructField t struct field
+                                        _ -> searchStructField t struct field
+
+structFieldType :: [Field] -> String -> Either String [String]
+structFieldType [] f = Left "Variable not defined."
+structFieldType (h:t) f = if f == getFieldName h
+                            then Right $ getFieldType h : []
+                            else structFieldType t f
+
 
 checkExpr :: SuperTable -> SynExpr -> Either String [String]
 checkExpr st se = case se of
@@ -331,6 +352,13 @@ checkExpr st se = case se of
                                 Right l -> if l == ["bool"]
                                             then Right l
                                             else Left "Operator 'not' expects an operand of type bool."
+                  --mudar "" pra $ getlabel e2
+                  SynArrow e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                      Left msg -> Left msg
+                                      Right l1 -> let s1 = head l1 in
+                                                    if T.unpack (T.take 6 (T.pack s1))  == "struct"
+                                                      then searchStructField (snd st) (T.unpack (T.take (length s1 - 7) (T.pack s1))) ""
+                                                      else Left "Operator '->' expects a struct as a left operand."
                   SynExp e1 e2 -> case checkExpr st $ ignorepos e1 of
                                     Left msg -> Left msg
                                     Right l1 -> if l1 == ["int"] || l1 == ["float"]
@@ -452,11 +480,61 @@ checkExpr st se = case se of
                                                                                     else Left "Operator '.' expects operands of equal types."
                                                                             else Left "Operator '.' expects operands of type vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
                                                       else Left "Operator '.' expects operands of type vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
-                  SynRShift e1 e2 -> Left ""
-                  SynLShift e1 e2 -> Left ""
-                  SynBitAnd e1 e2 -> Left ""  
-                  SynBitXor e1 e2 -> Left ""  
-                  SynBitOr e1 e2 -> Left "" 
+                  SynRShift e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                      Left msg -> Left msg
+                                      Right l1 -> if l1 == ["int"]
+                                                    then case checkExpr st $ ignorepos e2 of
+                                                            Left msg -> Left msg
+                                                            Right l2 -> if l2 == ["int"]
+                                                                          then if l1 == l2
+                                                                                  then Right l1
+                                                                                  else Left "Operator '>>' expects operands of equal types."
+                                                                          else Left "Operator '>>' expects operands of type int."
+                                                    else Left "Operator '>>' expects operands of type int."
+                  SynLShift e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                      Left msg -> Left msg
+                                      Right l1 -> if l1 == ["int"]
+                                                    then case checkExpr st $ ignorepos e2 of
+                                                            Left msg -> Left msg
+                                                            Right l2 -> if l2 == ["int"]
+                                                                          then if l1 == l2
+                                                                                  then Right l1
+                                                                                  else Left "Operator '<<' expects operands of equal types."
+                                                                          else Left "Operator '<<' expects operands of type int."
+                                                    else Left "Operator '<<' expects operands of type int."
+                  SynBitAnd e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                      Left msg -> Left msg
+                                      Right l1 -> if l1 == ["int"]
+                                                    then case checkExpr st $ ignorepos e2 of
+                                                            Left msg -> Left msg
+                                                            Right l2 -> if l2 == ["int"]
+                                                                          then if l1 == l2
+                                                                                  then Right l1
+                                                                                  else Left "Operator '&' expects operands of equal types."
+                                                                          else Left "Operator '&' expects operands of type int."
+                                                    else Left "Operator '&' expects operands of type int." 
+                  SynBitXor e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                      Left msg -> Left msg
+                                      Right l1 -> if l1 == ["int"]
+                                                    then case checkExpr st $ ignorepos e2 of
+                                                            Left msg -> Left msg
+                                                            Right l2 -> if l2 == ["int"]
+                                                                          then if l1 == l2
+                                                                                  then Right l1
+                                                                                  else Left "Operator '~' expects operands of equal types."
+                                                                          else Left "Operator '~' expects operands of type int."
+                                                    else Left "Operator '~' expects operands of type int."  
+                  SynBitOr e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                      Left msg -> Left msg
+                                      Right l1 -> if l1 == ["int"]
+                                                    then case checkExpr st $ ignorepos e2 of
+                                                            Left msg -> Left msg
+                                                            Right l2 -> if l2 == ["int"]
+                                                                          then if l1 == l2
+                                                                                  then Right l1
+                                                                                  else Left "Operator '|' expects operands of equal types."
+                                                                          else Left "Operator '|' expects operands of type int."
+                                                    else Left "Operator '|' expects operands of type int."
                   SynEQ e1 e2 -> case checkExpr st $ ignorepos e1 of
                                     Left msg -> Left msg
                                     Right l1 -> case checkExpr st $ ignorepos e2 of
@@ -542,7 +620,6 @@ checkExpr st se = case se of
                                                                         then Right l1
                                                                         else Left "Operator 'or' expects operands of type bool."
                                                   else Left "Operator 'or' expects operands of type bool."    
-                  
 
 findFuncRetTypes :: [STEntry] -> String -> Either String [String]
 findFuncRetTypes [] s = Left "Function not defined."
