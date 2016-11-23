@@ -18,14 +18,25 @@ data Scope = Global
 data Val = IntVal Int
          | FloatVal Float
          | BoolVal Bool
+         | StructVal Type [Val]
          | None
-         deriving (Show, Eq)
+         deriving (Eq)
 
+
+instance Show Val where
+    show (IntVal i) = show i
+    show (FloatVal f) = show f
+    show (BoolVal b) = if b then "true" else "false"
+    show (StructVal (StructType n ts) vals) =
+        n ++ " {" ++ show vals ++ "}"
+    show None = "NONE"
+        
 
 instance Typed Val where
     toType (IntVal _) = IntType
     toType (FloatVal _) = FloatType
     toType (BoolVal _) = BoolType
+    toType (StructVal t _) = t
     toType None = NoneType
 
 
@@ -40,6 +51,8 @@ data Var = Var { getVarName :: String
 instance Typed Var where
     toType = getVarType
 
+instance Named Var where
+    getName = getVarName
 
 -- | PIG Procedure
 data Proc = NativeProc Name Type ([Val] -> Exec ())
@@ -79,13 +92,14 @@ setVarScope var scope =
     Var (getVarName var) (getVarType var) (getVarValue var) scope
 
 
+type StructTable = [Type]
 type ProcTable = [Proc]
 type FuncTable = [Func]
 
 -- | Program State
 data ProgramState =
     State { getVarTable :: [Var] -- ^ Variable table
-          , getStructTable :: [Type] -- ^ Struct table
+          , getStructTable :: StructTable -- ^ Struct table
           , getProcTable :: ProcTable -- ^ Procedure table
           , getFuncTable :: FuncTable -- ^ Function table
           }
@@ -183,8 +197,17 @@ modifyVarTable vt = mkExec $
 
 
 -- | Get current struct table
-obtainStructTable :: Exec [Type]
+obtainStructTable :: Exec StructTable
 obtainStructTable = mkEval $ return . getStructTable
+
+
+-- | Set current procedure table
+modifyStructTable :: StructTable -> Exec ()
+modifyStructTable st = mkExec $
+    \state -> let vt = getVarTable state
+                  pt = getProcTable state
+                  ft = getFuncTable state
+               in return (State vt st pt ft)
 
 
 -- | Get current procedure table
@@ -229,9 +252,32 @@ runPrintLn s = mkExec $ \state ->
 -- | Prints full variable table
 runStatus :: Exec ()
 runStatus =
-    do vt <- obtainVarTable
-       runPrintLn "status> "
-       mapM_ (runPrintLn . show) vt
+    do runPrintLn "status> "
+       vt <- obtainVarTable
+       let pvar var = getName var ++ "=" ++ show (getVarValue var) ++ ", "
+       runPrintLn $ "vars: " ++ (concatMap pvar vt)
+       -- st <- obtainStructTable
+       -- runPrintLn $ "structs:" ++ (map show st)
+
+-- == Struct table auxiliary functions
+
+findStruct :: String -> Exec Type
+findStruct structname =
+    do structs <- obtainStructTable
+       let matchstruct (StructType n _) = n == structname
+           matchstruct _ = False
+           struct = find matchstruct structs
+       case struct of
+         Just st -> return st
+         Nothing -> error $ "couldn't find struct " ++ structname
+   
+
+-- | Register struct into strcut table
+registerStruct :: Type -> Exec ()
+registerStruct st@(StructType _ _) =
+    do structs <- obtainStructTable
+       modifyStructTable $ st : structs
+registerStruct _ = error "can't register non-struct"
 
 
 -- == Procedure table auxiliary functions
@@ -240,7 +286,7 @@ findProc :: String -> Type -> Exec Proc
 findProc procname proctype =
     do procs <- obtainProcTable
        let matchname = (==procname) . getName
-           matchtype = (==proctype) . toType
+           matchtype = (similar proctype) . toType
            proc = find (\s -> matchname s && matchtype s) procs
        case proc of
          Just p -> return p
@@ -260,7 +306,7 @@ findFunc :: String -> [Type] -> Exec Func
 findFunc funcname argtypes =
     do funcs <- obtainFuncTable
        let matchname = (==funcname) . getName
-           matchtype = (funcSim $ FuncType [] argtypes) . toType
+           matchtype = (similar $ FuncType [] argtypes) . toType
            func = find (\f -> matchname f && matchtype f) funcs
        case func of
          Just d -> return d
@@ -278,11 +324,11 @@ registerFunc f =
 
 findType :: SynType -> Exec Type
 findType (SynType locident)
-  | i == "int" = return IntType
-  | i == "float" = return FloatType
-  | i == "bool" = return BoolType
-  | otherwise = error $ "couldn't find type " ++ i
-  where i = getlabel . ignorepos $ locident
+  | n == "int" = return IntType
+  | n == "float" = return FloatType
+  | n == "bool" = return BoolType
+  | otherwise = return $ NamedType n
+  where n = getName locident
 
 
 -- == Variable table auxiliary functions

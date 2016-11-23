@@ -7,9 +7,15 @@ import Syntactic
 
 -- = Expressions
 
+-- | Execution to exponentiation
+expVal :: Val -> Val -> Exec Val
+expVal (FloatVal f1) (FloatVal f2) = return $ FloatVal $ f1 ** f2
+
+
 -- | Execution to negate a value
 negVal :: Val -> Exec Val
-negVal (IntVal i) = return $ IntVal $ i
+negVal (IntVal i) = return $ IntVal $ -i
+negVal (FloatVal f) = return $ FloatVal $ -f
 
 
 -- | Execution to invert all bits
@@ -20,18 +26,21 @@ bitNotVal (IntVal i) = return $ IntVal $ complement i
 -- | Execution to multiply two values
 timesVal :: Val -> Val -> Exec Val
 timesVal (IntVal i1) (IntVal i2) = return $ IntVal $ i1 * i2
+timesVal (FloatVal f1) (FloatVal f2) = return $ FloatVal $ f1 * f2
 
 
 -- | Execution to multiply two values
 divVal :: Val -> Val -> Exec Val
 divVal (IntVal i1) (IntVal 0) = error "Division by 0"
 divVal (IntVal i1) (IntVal i2) = return $ IntVal $ div i1 i2
+divVal (FloatVal f1) (FloatVal f2) = return $ FloatVal $ f1 / f2
 
 
 -- | Execution to multiply two values
 modVal :: Val -> Val -> Exec Val
 modVal (IntVal i1) (IntVal 0) = error "Division by 0"
 modVal (IntVal i1) (IntVal i2) = return $ IntVal $ mod i1 i2
+modVal (FloatVal f1) (FloatVal f2) = return $ FloatVal $ f1 - f2 * (fromInteger . floor $ f1 / f2)
 
 
 -- | Execution to add two values
@@ -43,6 +52,7 @@ plusVal (FloatVal f1) (FloatVal f2) = return $ FloatVal $ f1 + f2
 -- | Execution to subtract two values
 minusVal :: Val -> Val -> Exec Val
 minusVal (IntVal i1) (IntVal i2) = return $ IntVal $ i1 - i2
+minusVal (FloatVal f1) (FloatVal f2) = return $ FloatVal $ f1 - f2
 
 
 -- | Execution for @>>@
@@ -58,31 +68,37 @@ lshiftVal (IntVal i1) (IntVal i2) = return $ IntVal $ shiftL i1 i2
 -- | Execution for @==@
 eqVal :: Val -> Val -> Exec Val
 eqVal (IntVal i1) (IntVal i2) = return $ BoolVal $ i1 == i2
+eqVal (FloatVal f1) (FloatVal f2) = return $ BoolVal $ f1 == f2
 
 
 -- | Execution for @=/=@
 neqVal :: Val -> Val -> Exec Val
 neqVal (IntVal i1) (IntVal i2) = return $ BoolVal $ i1 /= i2
+neqVal (FloatVal f1) (FloatVal f2) = return $ BoolVal $ f1 /= f2
 
 
 -- | Execution for @<@
 ltVal :: Val -> Val -> Exec Val
 ltVal (IntVal i1) (IntVal i2) = return $ BoolVal $ i1 < i2
+ltVal (FloatVal f1) (FloatVal f2) = return $ BoolVal $ f1 < f2
 
 
 -- | Execution for @<=@
 leVal :: Val -> Val -> Exec Val
 leVal (IntVal i1) (IntVal i2) = return $ BoolVal $ i1 <= i2
+leVal (FloatVal f1) (FloatVal f2) = return $ BoolVal $ f1 <= f2
 
 
 -- | Execution for @>@
 gtVal :: Val -> Val -> Exec Val
 gtVal (IntVal i1) (IntVal i2) = return $ BoolVal $ i1 > i2
+gtVal (FloatVal f1) (FloatVal f2) = return $ BoolVal $ f1 > f2
 
 
 -- | Execution for @>=@
 geVal :: Val -> Val -> Exec Val
 geVal (IntVal i1) (IntVal i2) = return $ BoolVal $ i1 >= i2
+geVal (FloatVal f1) (FloatVal f2) = return $ BoolVal $ f1 >= f2
 
 
 -- | Execution for bitwise and
