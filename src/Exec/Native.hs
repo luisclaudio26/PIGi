@@ -51,8 +51,28 @@ cols :: [Val] -> Exec [Val]
 cols [MatVal _ c _] = return $ [IntVal c]
 
 
+readLine :: Exec String
+readLine = mkEval $ const getLine
+
+
+readInt :: [Val] -> Exec [Val]
+readInt [] =
+    do ln <- readLine
+       return [IntVal $ read ln]
+
+
+readFloat :: [Val] -> Exec [Val]
+readFloat [] =
+    do ln <- readLine
+       return [FloatVal $ read ln]
+
+
 nativeFuncs :: [Func]
 nativeFuncs =
     [NativeFunc "rows" (FuncType [IntType] [MatType]) rows
     ,NativeFunc "cols" (FuncType [IntType] [MatType]) cols
+    ,NativeFunc "readint" (FuncType [] [IntType]) readInt
+    ,NativeFunc "readfloat" (FuncType [] [FloatType]) readFloat
     ]
+
+
