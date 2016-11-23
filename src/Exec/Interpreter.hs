@@ -1,5 +1,6 @@
 module Exec.Interpreter where
 
+import Control.Monad
 import Exec.Prim
 import Exec.Expr
 import Exec.Native
@@ -34,24 +35,30 @@ evalBin comp expr1 expr2 =
 
 
 -- | Execution of struct value extraction
-obtStructVal :: LocSynExpr -> LocSynExpr -> Exec Val
-obtStructVal locstexpr locidexpr =
+obtStructVal :: LocSynExpr -> Located SynIdent -> Exec Val
+obtStructVal locstexpr locident =
     do let stexpr = ignorepos locstexpr
-           idexpr = ignorepos locidexpr
+           ident  = ignorepos locident
            extrNames (StructType _ ts) = map fst ts
-       case idexpr of
-         (SynIdentExpr locident) ->
-             do let idname = getName locident
-                stval <- evalExpr locstexpr
-                case stval of
-                  (StructVal sttype vals) ->
-                      let ns = extrNames sttype
-                          idx = elemIndex idname ns
-                       in case idx of
-                            Just i -> return $ vals !! i
-                            Nothing -> error "field not found"
-                  _ -> error "can't access non-structure"
-         _ -> error "invalid arrow operator usage"
+           idname = getName locident
+       stval <- evalExpr locstexpr
+       case stval of
+         (StructVal sttype vals) ->
+             let ns = extrNames sttype
+                 idx = elemIndex idname ns
+                 in case idx of
+                      Just i -> return $ vals !! i
+                      Nothing -> error "field not found"
+         _ -> error "can't access non-structure"
+
+
+-- | Execution of matrix value extraction
+obtMatVal :: [[LocSynExpr]] -> Exec Val
+obtMatVal mat =
+    do vals <- mapM (mapM evalExpr) mat
+       let rows = length vals
+           cols = length $ head vals
+        in return $ MatVal rows cols vals
 
 
 -- | Execution to evaluate expression
@@ -69,12 +76,13 @@ evalExpr = eval . ignorepos
               return $ BoolVal $ getbool . ignorepos $ locbool
 
           eval (SynIdentExpr locident) =
-              do var <- findVar . getlabel . ignorepos $ locident
-                 return $ getVarValue var
+              do obtainVarValue $ getName locident
 
           eval (SynCallExpr loccall) = fmap head $ callFunc loccall
 
-          eval (SynArrow e1 e2) = obtStructVal e1 e2
+          eval (SynArrow expr ident) = obtStructVal expr ident
+
+          eval (SynMat mat) = obtMatVal mat
 
           eval (SynPar e) = evalExpr e
           eval (SynExp e1 e2) = evalBin expVal e1 e2
@@ -179,7 +187,7 @@ runAttr locattr =
               (SynCallExpr loccall) ->
                   do vals <- callFunc loccall
                      let names = map (getlabel . ignorepos) locidents
-                     sequence_ $ zipWith changeVar names vals
+                     sequence_ $ zipWith modifyVarValue names vals
               _ -> distRunAttr locattr
        else distRunAttr locattr
 
@@ -191,11 +199,9 @@ distRunAttr locattr =
     do let attr = ignorepos locattr
            locidents = getAttrVars attr 
            locexprs = getAttrExprs attr
-       runPrintLn $ "attr for " ++ show locidents
        vals <- mapM evalExpr locexprs
        let names = map (getlabel . ignorepos) locidents
-       sequence_ $ zipWith changeVar names vals
-       runStatus
+       zipWithM_ modifyVarValue names vals
 
 
 -- | Statement execution
@@ -296,8 +302,7 @@ callFunc loccall =
                  registerRets (getFuncRet sf) 
                  runBlock $ getFuncBlock sf
                  let retNames = map getName $ getFuncRet sf
-                     extrVal vname = fmap getVarValue $ findVar vname
-                 mapM extrVal retNames
+                 mapM obtainVarValue retNames
            modifyVarTable vt
            return rets
 
@@ -306,7 +311,9 @@ callFunc loccall =
 
 -- | Load builtin procedures and functions
 loadNativeSymbols :: Exec ()
-loadNativeSymbols = mapM_ registerProc nativeProcs
+loadNativeSymbols =
+    do mapM_ registerProc nativeProcs
+       mapM_ registerFunc nativeFuncs
 
 -- | Load global variables, procedures, functions ans structs
 loadModuleSymbols :: SynModule -> Exec ()
@@ -332,6 +339,5 @@ runmodule :: SynModule -> Exec ()
 runmodule m =
     do loadNativeSymbols
        loadModuleSymbols m
-       runPrintLn "Hello"
        main <- findProc "main" (ProcType [])
        runProc main 

@@ -58,12 +58,8 @@ data SynType = SynTypeNGen{ getTypeIdent :: (Located SynIdent)}
                           , getTypeArgs  :: (Located SynTypeList) }deriving (Show)
 
 instance Typed SynType where
-    toType tp = let name = getlabel . ignorepos . getTypeIdent $ tp
-                 in case name of
-                     "int" -> IntType
-                     "bool" -> BoolType
-                     "float" -> FloatType
-                     name -> NamedType name
+    toType tp = strToType . getName . getTypeIdent $ tp
+
 
 -- | SynParser of type
 syntype :: SynParser SynType
@@ -512,7 +508,7 @@ data SynExpr = SynIdentExpr (Located SynIdent)
              | SynLitFloatExpr (Located SynLitFloat)
              | SynLitBoolExpr (Located SynLitBool)
              | SynCallExpr (Located SynCall)
-             | SynArrow    LocSynExpr LocSynExpr
+             | SynArrow    LocSynExpr (Located SynIdent)
              | SynPar      LocSynExpr
              | SynExp      LocSynExpr LocSynExpr
              | SynNeg      LocSynExpr
@@ -540,6 +536,8 @@ data SynExpr = SynIdentExpr (Located SynIdent)
              | SynAnd      LocSynExpr LocSynExpr
              | SynXor      LocSynExpr LocSynExpr
              | SynOr       LocSynExpr LocSynExpr
+             | SynMat      [[LocSynExpr]]
+
 
 paren :: (Show a) => a -> String
 paren x = "(" ++ show x ++ ")"
@@ -584,6 +582,7 @@ instance Show SynExpr where
     show (SynLitFloatExpr lit) = show lit
     show (SynLitBoolExpr lit) = show lit
     show (SynCallExpr call) = show call
+    show (SynMat mat) = show mat
 
 type LocSynExpr = Located SynExpr
 
@@ -615,13 +614,42 @@ synexprPar = locate $
 synexprCall :: SynParser SynExpr
 synexprCall = locate $ fmap SynCallExpr syncall
 
+
+-- | Matrix/vector expression syntactic parser
+synexprMat :: SynParser SynExpr
+synexprMat =
+    let matrow = many synexpr
+        matrows = matrow `sepBy` synlex LexSemicolon
+     in locate $
+         do synlex LexLBracket
+            mat <- fmap SynMat matrows
+            synlex LexRBracket
+            return mat
+
+
 -- | High precedence expression unit parser
 synexprUnit :: SynParser SynExpr
 synexprUnit = synexprPar <|> synexprLitInt
                          <|> synexprLitFloat
                          <|> synexprLitBool
                          <|> try synexprCall
+                         <|> synexprMat
                          <|> synexprIdent
+
+
+-- | Unit followes by arrow access parser
+synexprArrows :: SynParser SynExpr
+synexprArrows = 
+    let arrowparser =
+            do arrow <- synlex LexArrow
+               ident <- synident
+               return (getpos arrow, ident)
+        buildexpr locexpr (loc, locident) =
+            mklocated loc (SynArrow locexpr locident)
+     in do expr <- synexprUnit
+           accs <- many arrowparser
+           return $ foldl buildexpr expr accs
+
 
 -- | Binary operator syntactic parser
 synexprBinOp :: LexToken -- ^operator lexical token
@@ -666,7 +694,6 @@ opUnL ltok stok = Prefix (synexprUnOp ltok stok)
 -- | Operator table, by precedence order
 synoptable :: OperatorTable [PosLexToken] () Identity LocSynExpr
 synoptable = [ -- highest precedence
-              [ opBinL LexArrow SynArrow ],
               [ opBinR LexExp SynExp ],
               [ opUnL LexMinus SynNeg
               , opUnL LexBitNot SynBitNot ],
@@ -695,16 +722,10 @@ synoptable = [ -- highest precedence
               [ opBinL LexOr SynOr ]
              ] -- lowest precedence
 
--- About arrow operator in expressions:
--- altough is should be modeled as an ->ident posfix
--- operator, parsec do not support two unary operators
--- in sequence. Therefore, it is a binary operator,
--- and structure verification must happen in latter
--- processing stages.
 
 -- | Expression syntactic parser
 synexpr :: SynParser SynExpr
-synexpr = buildExpressionParser synoptable synexprUnit
+synexpr = buildExpressionParser synoptable synexprArrows
 
 -- | Syntactic constructs 
 -- | and SynParser for module
