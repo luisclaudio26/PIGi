@@ -62,10 +62,12 @@ stFromModStmts st (h:t) = let result = stFromModStmt st h in
                                 Right newSt -> stFromModStmts newSt t
 
 
+-- Statements inside a module are global and thus have
+-- scope level zero.
 stFromModStmt :: SuperTable -> SynModStmt -> Either String SuperTable
 stFromModStmt st s = case s of
                             (SynModStruct stct) -> stFromStruct st (ignorepos stct)
-                            (SynModDef def) -> stFromDef st 0 (ignorepos def)
+                            (SynModDef def) -> stFromDef st 0 (ignorepos def)  
                             (SynModProc proc) -> stFromProc st (ignorepos proc)
                             (SynModFunc func) -> stFromFunc st (ignorepos func)
 
@@ -78,7 +80,6 @@ stFromStruct st stct = let n = getlabel $ ignorepos $ getSynStructName stct in
                                             newEntry = StructEntry (getlabel $ ignorepos $ getSynStructName stct)
                                                                    ([])
 
--- PENDING !!! [LUÍS] O nível não necessariamente é zero!
 stFromDef :: SuperTable -> Int -> SynDef -> Either String SuperTable
 stFromDef st lvl (SynDef typedId) = stFromTypedIdentList st lvl typedId
 
@@ -224,19 +225,19 @@ checkProc st proc = case checkBlock st 1 $ getProcBlock unlocProc of
                   where unlocProc = ignorepos proc
 
 checkBlock :: SuperTable -> Int -> Located SynBlock -> Either String SynBlock
-checkBlock st _ block = case checkedStmts of
+checkBlock st lvl block = case checkedStmts of
                           Right _ -> Right $ ignorepos block
                           Left msg -> Left msg
-                        where checkedStmts = checkStmts st $ ignorepos `fmap` getStmts (ignorepos block)
+                        where checkedStmts = checkStmts st lvl (ignorepos `fmap` getStmts (ignorepos block))
 
-checkStmts :: SuperTable -> [SynStmt] -> Either String [SynStmt]
-checkStmts st [] = Right []
-checkStmts st (stmt:tail) = case fst checkedStmt of
-                            Left msg -> Left msg
-                            Right _ -> do h <- fst checkedStmt
-                                          t <- checkStmts (snd checkedStmt) tail
-                                          Right (h:t)
-                          where checkedStmt = checkStmt st stmt
+checkStmts :: SuperTable -> Int -> [SynStmt] -> Either String [SynStmt]
+checkStmts st lvl [] = Right []
+checkStmts st lvl (stmt:tail) = case fst checkedStmt of
+                                  Left msg -> Left msg
+                                  Right _ -> do h <- fst checkedStmt
+                                                t <- checkStmts (snd checkedStmt) lvl tail
+                                                Right (h:t)
+                                where checkedStmt = checkStmt st lvl stmt
 
 -- TODO: [LUÍS] Isso é uma gambiarra horrorosa que teve de ser feita porque
 -- não lembrei que a tabela vai mudar dentro dos blocos. Com sorte o problema
@@ -245,24 +246,27 @@ checkStmts st (stmt:tail) = case fst checkedStmt of
 -- da função. Essa tabela atualizada é a que é propagada pros statement 
 -- subsequentes. Tentei fazer o conserto mais rápido e menos danoso ao resto
 -- do código possível. Lembrar de consertar isso depois.
-checkStmt :: SuperTable -> SynStmt -> (Either String SynStmt, SuperTable)
-checkStmt st s = case s of
-                SynStmtAttr sa -> let a@(SynAttr l1 l2) = ignorepos sa in
-                                    if length l1 /= length l2
-                                      then (Left "Different number of identifiers and expressions in attribution.", st)
-                                      else case (checkAttr st a) of
-                                              Left msg -> (Left msg, st)
-                                              Right _ -> (Right s, st) 
-                SynStmtDefAttr sda -> (Right s, st)
-                SynStmtIf si -> (Right s, st)
-                SynStmtWhile sw -> (Right s, st)
-                SynStmtCall sc -> (Right s, st)
-                SynStmtDef sd -> case eitherNewSt of
-                                    Right newSt -> (Right s, newSt)
-                                    Left msg -> (Left msg, st)
-                                  where 
-                                    eitherNewSt = stFromDef st 0 def -- PENDING! Statement must carry scope level
-                                    def = ignorepos sd
+--
+-- UPDATE: Quick reminder for the future: while checking a IF/WHILE's block, 
+-- we shall increment the scope level. 
+checkStmt :: SuperTable -> Int -> SynStmt -> (Either String SynStmt, SuperTable)
+checkStmt st lvl s = case s of
+                      SynStmtAttr sa -> let a@(SynAttr l1 l2) = ignorepos sa in
+                                          if length l1 /= length l2
+                                            then (Left "Different number of identifiers and expressions in attribution.", st)
+                                            else case (checkAttr st a) of
+                                                    Left msg -> (Left msg, st)
+                                                    Right _ -> (Right s, st) 
+                      SynStmtDefAttr sda -> (Right s, st)
+                      SynStmtIf si -> (Right s, st)
+                      SynStmtWhile sw -> (Right s, st)
+                      SynStmtCall sc -> (Right s, st)
+                      SynStmtDef sd -> case eitherNewSt of
+                                          Right newSt -> (Right s, newSt)
+                                          Left msg -> (Left msg, st)
+                                        where 
+                                          eitherNewSt = stFromDef st lvl def -- PENDING! Statement must carry scope level
+                                          def = ignorepos sd
 
 --trocar: naao é s1 == s2, levar em conta o "_" 
 checkAttr :: SuperTable -> SynAttr -> Either String SynAttr
@@ -312,7 +316,7 @@ searchSymbolTable (h:t) s = case h of
 searchUserTypeTable :: [UTEntry] -> String -> Either String String
 searchUserTypeTable [] s = Left "Variable not defined."
 searchUserTypeTable (h:t) s = case h of
-                                StructEntry name _ _ -> if name == s
+                                StructEntry name _ -> if name == s
                                                           then Right $ "struct " ++ name
                                                           else searchUserTypeTable t s
                                 _ -> searchUserTypeTable t s
@@ -320,9 +324,9 @@ searchUserTypeTable (h:t) s = case h of
 searchStructField :: [UTEntry] -> String -> String -> Either String [String]
 searchStructField [] struct field = Left "Variable not defined."
 searchStructField (h:t) struct field = case h of
-                                        StructEntry name l _ -> if name == struct
-                                                                    then structFieldType l field
-                                                                    else searchStructField t struct field
+                                        StructEntry name l -> if name == struct
+                                                                  then structFieldType l field
+                                                                  else searchStructField t struct field
                                         _ -> searchStructField t struct field
 
 structFieldType :: [Field] -> String -> Either String [String]
