@@ -311,7 +311,9 @@ callFunc loccall =
 
 -- | Load builtin procedures and functions
 loadNativeSymbols :: Exec ()
-loadNativeSymbols = mapM_ registerProc nativeProcs
+loadNativeSymbols =
+    do mapM_ registerProc nativeProcs
+       mapM_ registerFunc nativeFuncs
 
 -- | Load global variables, procedures, functions ans structs
 loadModuleSymbols :: SynModule -> Exec ()

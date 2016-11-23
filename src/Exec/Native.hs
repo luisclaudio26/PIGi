@@ -1,8 +1,11 @@
-module Exec.Native (nativeProcs) where
+module Exec.Native (nativeProcs, nativeFuncs) where
 
 import Prelude hiding (print)
 import Types
 import Exec.Prim
+
+
+-- = Native procedures
 
 printStr :: String -> Exec ()
 printStr s = mkExec $ \state ->
@@ -38,3 +41,18 @@ nativeProcs =
     ,NativeProc "println" (ProcType [MatType]) printLn
     ]
 
+-- = Native functions
+
+rows :: [Val] -> Exec [Val]
+rows [MatVal r _ _] = return $ [IntVal r]
+
+
+cols :: [Val] -> Exec [Val]
+cols [MatVal _ c _] = return $ [IntVal c]
+
+
+nativeFuncs :: [Func]
+nativeFuncs =
+    [NativeFunc "rows" (FuncType [IntType] [MatType]) rows
+    ,NativeFunc "cols" (FuncType [IntType] [MatType]) cols
+    ]
