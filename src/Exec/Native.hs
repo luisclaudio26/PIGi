@@ -9,6 +9,11 @@ printStr s = mkExec $ \state ->
     do putStr s
        return state 
 
+
+printStrLn :: String -> Exec ()
+printStrLn = printStr . (++"\n")
+
+
 print :: [Val] -> Exec ()
 print [(IntVal i)] = printStr $ show i
 print [(FloatVal f)] = printStr $ show f
@@ -21,6 +26,17 @@ printLn v = do print v
                printStr "\n"
 
 
+status :: [Val] -> Exec ()
+status [] =
+    do printStrLn "status> "
+       vt <- obtainVarTable
+       let names = map getName vt
+       vals <- mapM obtainVarValue names
+       let printv name val = name ++ "=" ++ show val ++ ", "
+           printvs ns vs = concat $ zipWith printv ns vs
+       printStrLn $ "vars: " ++ printvs names vals
+
+
 nativeProcs :: [Proc]
 nativeProcs =
     [NativeProc "print" (ProcType [IntType]) print
@@ -31,5 +47,6 @@ nativeProcs =
     ,NativeProc "println" (ProcType [FloatType]) printLn
     ,NativeProc "println" (ProcType [BoolType]) printLn
     ,NativeProc "println" (ProcType [MatType]) printLn
+    ,NativeProc "status" (ProcType []) status
     ]
 

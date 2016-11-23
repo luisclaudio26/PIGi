@@ -1,5 +1,6 @@
 module Exec.Interpreter where
 
+import Control.Monad
 import Exec.Prim
 import Exec.Expr
 import Exec.Native
@@ -198,11 +199,9 @@ distRunAttr locattr =
     do let attr = ignorepos locattr
            locidents = getAttrVars attr 
            locexprs = getAttrExprs attr
-       runPrintLn $ "attr for " ++ show locidents
        vals <- mapM evalExpr locexprs
        let names = map (getlabel . ignorepos) locidents
-       sequence_ $ zipWith modifyVarValue names vals
-       runStatus
+       zipWithM_ modifyVarValue names vals
 
 
 -- | Statement execution
@@ -338,6 +337,5 @@ runmodule :: SynModule -> Exec ()
 runmodule m =
     do loadNativeSymbols
        loadModuleSymbols m
-       runPrintLn "Hello"
        main <- findProc "main" (ProcType [])
        runProc main 

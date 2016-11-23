@@ -276,25 +276,6 @@ modifyMemTable mt = mkExec $
 
 -- = Auxiliary functions
 
--- == Debug
-
--- | Print line
-runPrintLn :: String -> Exec ()
-runPrintLn s = mkExec $ \state ->
-    do putStrLn s
-       return state
-
--- | Prints full variable table
-runStatus :: Exec ()
-runStatus =
-    do runPrintLn "status> "
-       vt <- obtainVarTable
-       let names = map getName vt
-       vals <- sequence $ map obtainVarValue names
-       let printv name val = name ++ "=" ++ show val ++ ", "
-       runPrintLn $ "vars: " ++ concat (zipWith printv names vals)
-
-
 -- == Struct table auxiliary functions
 
 findStruct :: String -> Exec Type
