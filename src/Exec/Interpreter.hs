@@ -61,6 +61,20 @@ obtMatVal mat =
         in return $ MatVal rows cols vals
 
 
+-- | Execution of indexing
+obtIndexVal :: LocSynExpr -> [LocSynExpr] -> Exec Val
+obtIndexVal matexpr idxexprs =
+    do matval <- evalExpr matexpr
+       idxs <- mapM evalExpr idxexprs
+       case matval of
+         (MatVal m n mat) ->
+             case idxs of
+               [IntVal i, IntVal j] -> return ((mat !! i) !! j)
+               _ -> error "invalid indexing"
+         _ -> error "invalid indexed"
+       
+
+
 -- | Execution to evaluate expression
 evalExpr :: (Located SynExpr) -> Exec Val
 evalExpr = eval . ignorepos
@@ -83,6 +97,8 @@ evalExpr = eval . ignorepos
           eval (SynArrow expr ident) = obtStructVal expr ident
 
           eval (SynMat mat) = obtMatVal mat
+
+          eval (SynIndex e idxs) = obtIndexVal e idxs
 
           eval (SynPar e) = evalExpr e
           eval (SynExp e1 e2) = evalBin expVal e1 e2

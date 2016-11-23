@@ -1,6 +1,7 @@
 module Syntactic where
 
 import Control.Monad.Identity
+import Data.List
 import Text.Parsec (eof, sepBy)
 import Text.Parsec.Prim
 import Text.Parsec.Expr
@@ -485,6 +486,7 @@ data SynExpr = SynIdentExpr (Located SynIdent)
              | SynXor      LocSynExpr LocSynExpr
              | SynOr       LocSynExpr LocSynExpr
              | SynMat      [[LocSynExpr]]
+             | SynIndex    LocSynExpr [LocSynExpr]
 
 
 paren :: (Show a) => a -> String
@@ -531,6 +533,8 @@ instance Show SynExpr where
     show (SynLitBoolExpr lit) = show lit
     show (SynCallExpr call) = show call
     show (SynMat mat) = show mat
+    show (SynIndex x ys) = show x ++ "[" ++ sepys ++ "]"
+        where sepys = intercalate "," $ map show ys
 
 type LocSynExpr = Located SynExpr
 
@@ -585,18 +589,27 @@ synexprUnit = synexprPar <|> synexprLitInt
                          <|> synexprIdent
 
 
--- | Unit followes by arrow access parser
-synexprArrows :: SynParser SynExpr
-synexprArrows = 
+-- | Unit followes by arrow or index access parser
+synexprAccess :: SynParser SynExpr
+synexprAccess = 
     let arrowparser =
             do arrow <- synlex LexArrow
                ident <- synident
-               return (getpos arrow, ident)
-        buildexpr locexpr (loc, locident) =
+               return (getpos arrow, Left ident)
+        indexparser =
+            do lb <- synlex LexLBracket
+               exprs <- synexpr `sepBy` synlex LexComma
+               synlex LexRBracket
+               return (getpos lb, Right exprs)
+        buildexpr locexpr (loc, Left locident) =
             mklocated loc (SynArrow locexpr locident)
+        buildexpr locexpr (loc, Right locidxs) =
+            mklocated loc (SynIndex locexpr locidxs)
      in do expr <- synexprUnit
-           accs <- many arrowparser
+           accs <- many (arrowparser <|> indexparser)
            return $ foldl buildexpr expr accs
+
+
 
 
 -- | Binary operator syntactic parser
@@ -673,7 +686,7 @@ synoptable = [ -- highest precedence
 
 -- | Expression syntactic parser
 synexpr :: SynParser SynExpr
-synexpr = buildExpressionParser synoptable synexprArrows
+synexpr = buildExpressionParser synoptable synexprAccess
 
 -- | Syntactic constructs 
 -- | and SynParser for module
