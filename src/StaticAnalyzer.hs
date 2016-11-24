@@ -115,7 +115,6 @@ buildFuncRetTypeList ret = (getlabel . ignorepos . getTypeIdent . ignorepos . ge
 buildProcTypeStr :: [SynTypedIdent] -> [String]
 buildProcTypeStr formalParam = (getlabel . ignorepos . getTypeIdent . ignorepos . getTypedIdentType) `fmap` formalParam
 
-
 -- TODO: Code for entry is to big; maybe we could create some 
 -- helper functions to make it smaller.
 stFromTypedIdentList :: SuperTable -> Int -> [SynTypedIdent] -> Either String SuperTable
@@ -128,7 +127,6 @@ stFromTypedIdentList st lvl (h:t) = let name = getlabel $ ignorepos $ getTypedId
                                                         entry = Variable (getlabel $ ignorepos $ getTypedIdentName h) 
                                                                          (getLabelFromType $ ignorepos $ getTypedIdentType h)
                                                                           lvl
-                                                                         
 
 isElemUserTypeTable :: String -> [UTEntry] -> Bool
 isElemUserTypeTable s [] = False

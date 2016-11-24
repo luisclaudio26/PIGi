@@ -57,6 +57,9 @@ data LexToken = LexLParen         -- ^ @(@ token
               | LexWhile          -- ^ @while@ token
               | LexFor            -- ^ @for@ token
               | LexIn             -- ^ @in@ token
+              | LexModConst
+              | LexModMut
+              | LexRef
               | LexIdent String   -- ^ identifier
               | LexLitInt Int     -- ^ @int@ literal
               | LexLitFloat Float -- ^ @float@ literal
@@ -84,6 +87,9 @@ keywordTable = [("and", LexAnd)
                ,("in", LexIn)
                ,("true", LexLitBool True)
                ,("false", LexLitBool False)
+               ,("const", LexModConst)
+               ,("mut", LexModMut)
+               ,("ref", LexRef)
                ]
 
 -- | Map between symbols and lexical tokens
@@ -200,4 +206,3 @@ lexparser = do
     tks <- many (comment <|> lexunit)
     eof
     return $ filter ((/=Comment) . ignorepos) tks
-
