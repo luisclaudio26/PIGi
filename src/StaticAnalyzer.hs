@@ -265,7 +265,9 @@ checkStmt st lvl s = case s of
                                           Right _ -> (Right s, st) 
                       SynStmtDefAttr sda -> (Right s, st)
                       SynStmtIf si -> (Right s, st)
-                      SynStmtWhile sw -> (Right s, st)
+                      SynStmtWhile sw -> case checkWhile st lvl (ignorepos sw) of
+                                          Left msg -> (Left msg, st)
+                                          Right _ -> (Right s, st)                     
                       SynStmtCall sc -> (Right s, st)
                       SynStmtDef sd -> case eitherNewSt of
                                           Right newSt -> (Right s, newSt)
@@ -273,6 +275,19 @@ checkStmt st lvl s = case s of
                                         where 
                                           eitherNewSt = stFromDef st lvl def -- PENDING! Statement must carry scope level
                                           def = ignorepos sd
+
+-- [LUIS] FINALLY! Check https://www.schoolofhaskell.com/school/
+-- starting-with-haskell/basics-of-haskell/10_Error_Handling
+-- for the correct way of dealing with Either.
+checkWhile :: SuperTable -> Int -> SynWhile -> Either String SynWhile
+checkWhile st lvl sw = case exprOk of
+                          Left msg -> Left msg
+                          Right _ -> case blockOk of
+                                        Left msg -> Left msg
+                                        Right _ -> Right sw
+                        where
+                          exprOk = checkExpr st (ignorepos $ getWhileCondition sw)
+                          blockOk = checkBlock st (lvl+1) (getWhileBlock sw)
 
 --trocar: naao é s1 == s2, levar em conta o "_" 
 checkAttr :: SuperTable -> SynAttr -> Either String SynAttr
