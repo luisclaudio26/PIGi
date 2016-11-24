@@ -277,16 +277,25 @@ checkStmt st lvl s = case s of
                                           def = ignorepos sd
 
 checkCall :: SuperTable -> Int -> SynCall -> Either String SynCall
-checkCall st lvl sc = if formal == actual 
-                        then Right sc 
-                        else Left ("Parameters type in call '" ++ (show sc) ++ "' do not match with parameters in definition.")
+checkCall st lvl sc = if ret == True
+                        then if formal == actual 
+                                then Right sc 
+                                else Left ("Parameters type in call '" ++ 
+                                              (show sc) ++ 
+                                              "' do not match with parameters in definition.")
+                        else Left $ (show sc) ++ " is not a procedure."
                       where
-                        formal = case searchSTEntry (fst st) (getlabel $ ignorepos $ getFuncId sc) of
+                        stEntry = searchSTEntry (fst st) (getlabel $ ignorepos $ getFuncId sc)
+                        formal = case stEntry of
                                   Left msg -> Nothing
                                   Right l -> Just $ getProcArgTypes l 
                         actual = case buildExprTypeList st (ignorepos `fmap` (getexprlist $ getArgList sc)) of
                                   Left msg -> Nothing
                                   Right l -> Just l
+                        ret = case stEntry of
+                                  Left msg -> False
+                                  Right (Procedure _ _ ) -> True
+                                  Right (Function _ _ _) -> False 
 
 -- [LUIS] FINALLY! Check https://www.schoolofhaskell.com/school/
 -- starting-with-haskell/basics-of-haskell/10_Error_Handling
