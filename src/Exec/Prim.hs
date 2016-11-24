@@ -341,7 +341,7 @@ registerFunc f =
 
 findType :: SynType -> Exec Type
 
-findType (SynTypeNGen locident)
+findType (SynTypeNGen _ locident)
   | n == "int" = return IntType
   | n == "float" = return FloatType
   | n == "bool" = return BoolType

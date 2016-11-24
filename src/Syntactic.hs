@@ -53,9 +53,21 @@ synident = syntoken $
 getLabelFromType :: SynType -> String
 getLabelFromType t = getlabel . ignorepos . getTypeIdent $ t
 
+data SynAnnotation = SynAnnotation { getModifier :: (Located SynToken) 
+                                   , getRef :: (Maybe (Located SynToken))
+                                   } deriving (Show)
+
+synannotation :: SynParser SynAnnotation
+synannotation = locate $
+  do tok <- synlex LexModMut <|> synlex LexModConst 
+     ra   <- fmap Just (synlex LexRef) <|> return Nothing
+     return $ SynAnnotation tok ra
+
 -- | Syntactic construct for type 
-data SynType = SynTypeNGen{ getTypeIdent :: (Located SynIdent)}
-             | SynTypeGen { getTypeIdent :: (Located SynIdent)
+data SynType = SynTypeNGen{ getAnnotation :: (Maybe(Located SynAnnotation))
+                          , getTypeIdent :: (Located SynIdent)}
+             | SynTypeGen { getAnnotation :: (Maybe(Located SynAnnotation))
+                          , getTypeIdent :: (Located SynIdent)
                           , getTypeArgs  :: (Located SynTypeList) }deriving (Show)
 
 instance Typed SynType where
@@ -66,19 +78,22 @@ instance Typed SynType where
 syntype :: SynParser SynType
 syntype = try syntypegen <|> syntypengen
 
+
 -- | SynParser of a non generic type
 syntypengen:: SynParser SynType
 syntypengen = locate $
-  do name <- synident
-     return $ SynTypeNGen name
+  do extension <- fmap Just synannotation <|> return Nothing
+     name <- synident
+     return $ SynTypeNGen extension name
 
 -- | SynParser of a generic type. 
 -- Example: struct<int, float>
 syntypegen:: SynParser SynType
 syntypegen = locate $
-  do name <- synident
+  do extension <- fmap Just synannotation <|> return Nothing
+     name <- synident
      args <- synttype
-     return $ SynTypeGen name args
+     return $ SynTypeGen extension name args
 
 -- | Syntactic construct for list of syntype 
 data SynTypeList = SynTypeList { gettypelist :: [Located SynType] } deriving (Show)
