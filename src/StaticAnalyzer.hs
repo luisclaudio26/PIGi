@@ -28,7 +28,7 @@ type SymbolTable = [STEntry]
 data Field = Field { getFieldName :: String
                    , getFieldType :: String } deriving (Show)
 
-data UTEntry = StructEntry { getStructName :: String     -- Type name
+data UTEntry = StructEntry { getStructId :: String     -- Type name
                           , getStructFields :: [Field] } -- List of fields defined inside this struct
              | Primitive { getPrimName :: String } deriving (Show)
 
@@ -75,19 +75,19 @@ stFromModStmt st s = case s of
 -- lie at scope level zero. Also, structs can't be defined inside subroutines,
 -- so it also must lie at scope level zero.
 stFromStruct :: SuperTable -> SynStruct -> Either String SuperTable 
-stFromStruct st stct = let n = getlabel $ ignorepos $ getSynStructName stct in
+stFromStruct st stct = let n = getlabel $ ignorepos $ getStructName stct in
                                 if isElemUserTypeTable n (snd st) || isElemSymbolTable n 0 (fst st)
                                   then Left "Name already being used as a type name or variable name."
                                   else Right (fst st, newTypeTable)
                                       where newTypeTable = newEntry : (snd st)
-                                            newEntry = StructEntry (getlabel $ ignorepos $ getSynStructName stct)
+                                            newEntry = StructEntry (getlabel $ ignorepos $ getStructName stct)
                                                                    ([])
 
 stFromDef :: SuperTable -> Int -> SynDef -> Either String SuperTable
 stFromDef st lvl (SynDef typedId) = stFromTypedIdentList st lvl typedId
 
 stFromProc :: SuperTable -> SynProc -> Either String SuperTable
-stFromProc st  (SynProc name formalParam block) = let n = getlabel $ ignorepos name in
+stFromProc st  (SynProc name _ formalParam block) = let n = getlabel $ ignorepos name in
                                                           if isElemUserTypeTable n  (snd st) || isElemSymbolTable n 0 (fst st)
                                                             then Left "Name already being used as a type name or variable name."
                                                             else Right (syt, (snd st))
@@ -96,7 +96,7 @@ stFromProc st  (SynProc name formalParam block) = let n = getlabel $ ignorepos n
                                                                                         (buildProcTypeStr formalParam)
 
 stFromFunc :: SuperTable -> SynFunc -> Either String SuperTable
-stFromFunc st  (SynFunc name formalParam ret block) = let n = getlabel $ ignorepos name in
+stFromFunc st  (SynFunc name _ formalParam ret block) = let n = getlabel $ ignorepos name in
                                                         if isElemUserTypeTable n (snd st) || isElemSymbolTable n 0 (fst st)
                                                         then Left "Name already being used as a type name or variable name."
                                                         else Right (syt, (snd st))

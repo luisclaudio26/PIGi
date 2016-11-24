@@ -416,29 +416,6 @@ synforp = locate $
      content <- synblock
      return $ SynForP i expr content
 
--- | Syntactic construct for 'struct'
-data SynStruct = SynStruct { getSynStructName :: Located SynIdent
-                           , getSynStructFields :: [SynTypedIdent] } deriving (Show)
-
--- | SynParser for 'struct'
-synstruct :: SynParser SynStruct
-synstruct = locate $
-  do synlex LexStruct
-     name <- synident
-     synlex LexAttr
-     synlex LexLParen
-     i <- fmap gettypedidentlist synTypedIdentList
-     synlex LexRParen
-     synlex LexSemicolon
-     return $ SynStruct name i
-
-instance Typed SynStruct where
-    toType (SynStruct n tis) = StructType (getName n) (map extr tis)
-        where extr ti = (getName ti, toType ti)
-
-instance Named SynStruct where
-    getName (SynStruct n _) = getName n
-
 -- | Syntactic construct for 'proc'
 data SynProc = SynProc { getProcIdent :: (Located SynIdent)
                        , getProcTemplateType :: (Maybe (Located SynIdentList))
