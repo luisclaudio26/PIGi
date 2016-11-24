@@ -1,6 +1,7 @@
 module Exec.Expr where
 
 import Data.Bits 
+import Data.Foldable
 import Control.Monad
 import Exec.Prim
 import PosParsec
@@ -29,6 +30,15 @@ bitNotVal (IntVal i) = return $ IntVal $ complement i
 timesVal :: Val -> Val -> Exec Val
 timesVal (IntVal i1) (IntVal i2) = return $ IntVal $ i1 * i2
 timesVal (FloatVal f1) (FloatVal f2) = return $ FloatVal $ f1 * f2
+timesVal (MatVal m1 n1 mat1) (MatVal m2 n2 mat2)
+    | n1 == m2 = fmap (MatVal m1 n2) $ mapM (mapM valAt) indxs
+    | otherwise = error "invaid matrix multiplication dimensions"
+    where
+        -- matrix multiplication 
+        indxs = [[(i, j) | j <- [0..(n2-1)]] | i <- [0..(m1-1)]]
+        sumVals = foldlM plusVal (FloatVal 0)
+        mults i j = zipWithM timesVal (matRow mat1 i) (matCol mat2 j)
+        valAt (i,j) = mults i j >>= sumVals
 
 
 -- | Execution to multiply two values
@@ -36,6 +46,16 @@ divVal :: Val -> Val -> Exec Val
 divVal (IntVal i1) (IntVal 0) = error "Division by 0"
 divVal (IntVal i1) (IntVal i2) = return $ IntVal $ div i1 i2
 divVal (FloatVal f1) (FloatVal f2) = return $ FloatVal $ f1 / f2
+
+
+-- | Execution to multiply two matrices elementwise
+dotTimesVal :: Val -> Val -> Exec Val
+dotTimesVal (MatVal _ _ mat1) (MatVal _ _ mat2) = matBinOp timesVal mat1 mat2
+
+
+-- | Execution to divide two matrices elementwise
+dotDivVal :: Val -> Val -> Exec Val
+dotDivVal (MatVal _ _ mat1) (MatVal _ _ mat2) = matBinOp divVal mat1 mat2
 
 
 -- | Execution to multiply two values
@@ -143,6 +163,16 @@ orVal (BoolVal b1) (BoolVal b2) = return $ BoolVal $ b1 || b2
 -- | Build a matrix from list of lists
 mkMat :: [[Val]] -> Val
 mkMat p = MatVal (length p) (length $ head p) p
+
+
+-- | Extract row from matrix
+matRow :: [[Val]] -> Int -> [Val]
+matRow mat i = (mat !! i) 
+
+
+-- | Extract column from matrix
+matCol :: [[Val]] -> Int -> [Val]
+matCol mat j = map (!!j) mat
 
 
 -- | Build matrix binary operation execution from scalar operation
