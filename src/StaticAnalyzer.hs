@@ -71,9 +71,12 @@ stFromModStmt st s = case s of
                             (SynModProc proc) -> stFromProc st (ignorepos proc)
                             (SynModFunc func) -> stFromFunc st (ignorepos func)
 
+-- Remember we don't have nested functions/procedures, so they'll always
+-- lie at scope level zero. Also, structs can't be defined inside subroutines,
+-- so it also must lie at scope level zero.
 stFromStruct :: SuperTable -> SynStruct -> Either String SuperTable 
 stFromStruct st stct = let n = getlabel $ ignorepos $ getSynStructName stct in
-                                if isElemUserTypeTable n (snd st) || isElemSymbolTable n (fst st)
+                                if isElemUserTypeTable n (snd st) || isElemSymbolTable n 0 (fst st)
                                   then Left "Name already being used as a type name or variable name."
                                   else Right (fst st, newTypeTable)
                                       where newTypeTable = newEntry : (snd st)
@@ -85,7 +88,7 @@ stFromDef st lvl (SynDef typedId) = stFromTypedIdentList st lvl typedId
 
 stFromProc :: SuperTable -> SynProc -> Either String SuperTable
 stFromProc st  (SynProc name formalParam block) = let n = getlabel $ ignorepos name in
-                                                          if isElemUserTypeTable n  (snd st) || isElemSymbolTable n  (fst st)
+                                                          if isElemUserTypeTable n  (snd st) || isElemSymbolTable n 0 (fst st)
                                                             then Left "Name already being used as a type name or variable name."
                                                             else Right (syt, (snd st))
                                                                 where syt = entry : (fst st)
@@ -94,7 +97,7 @@ stFromProc st  (SynProc name formalParam block) = let n = getlabel $ ignorepos n
 
 stFromFunc :: SuperTable -> SynFunc -> Either String SuperTable
 stFromFunc st  (SynFunc name formalParam ret block) = let n = getlabel $ ignorepos name in
-                                                        if isElemUserTypeTable n (snd st) || isElemSymbolTable n  (fst st)
+                                                        if isElemUserTypeTable n (snd st) || isElemSymbolTable n 0 (fst st)
                                                         then Left "Name already being used as a type name or variable name."
                                                         else Right (syt, (snd st))
                                                                 where syt = entry : (fst st)
@@ -118,7 +121,7 @@ buildProcTypeStr formalParam = (getlabel . ignorepos . getTypeIdent . ignorepos 
 stFromTypedIdentList :: SuperTable -> Int -> [SynTypedIdent] -> Either String SuperTable
 stFromTypedIdentList st lvl [] = Right st
 stFromTypedIdentList st lvl (h:t) = let name = getlabel $ ignorepos $ getTypedIdentName h in
-                                        if isElemUserTypeTable name (snd st) || isElemSymbolTable name (fst st)
+                                        if isElemUserTypeTable name (snd st) || isElemSymbolTable name lvl (fst st)
                                             then Left "Name already being used as a type name or variable name." 
                                             else stFromTypedIdentList (newST, snd st) lvl t
                                                   where newST = entry : (fst st)
@@ -137,18 +140,18 @@ isElemUserTypeTable s (h:t) = case h of
                                                     then True
                                                     else isElemUserTypeTable s t
 
-isElemSymbolTable :: String  -> [STEntry] -> Bool
-isElemSymbolTable s [] = False
-isElemSymbolTable s (h:t) = case h of 
-                                Variable name _ _ -> if name == s 
-                                                      then True
-                                                      else isElemSymbolTable s t 
-                                Function name _ _ -> if name == s
-                                                      then True
-                                                      else isElemSymbolTable s t
-                                Procedure name _ -> if name == s
-                                                      then True
-                                                      else isElemSymbolTable s t
+isElemSymbolTable :: String  -> Int -> [STEntry] -> Bool
+isElemSymbolTable s lvl [] = False
+isElemSymbolTable s lvl (h:t) = case h of 
+                                  Variable name _ varlvl -> if name == s && lvl == varlvl
+                                                            then True
+                                                            else isElemSymbolTable s lvl t 
+                                  Function name _ _ -> if name == s
+                                                        then True
+                                                        else isElemSymbolTable s lvl t
+                                  Procedure name _ -> if name == s
+                                                        then True
+                                                        else isElemSymbolTable s lvl t
 
 -----------------------------------
 --------- Static analyzer --------- TODO: Move this to another file when 
