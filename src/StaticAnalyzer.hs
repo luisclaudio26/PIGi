@@ -260,12 +260,9 @@ checkStmts st lvl (stmt:tail) = case fst checkedStmt of
 -- we shall increment the scope level. 
 checkStmt :: SuperTable -> Int -> SynStmt -> (Either String SynStmt, SuperTable)
 checkStmt st lvl s = case s of
-                      SynStmtAttr sa -> let a@(SynAttr l1 l2) = ignorepos sa in
-                                          if length l1 /= length l2
-                                            then (Left "Different number of identifiers and expressions in attribution.", st)
-                                            else case (checkAttr st a) of
-                                                    Left msg -> (Left msg, st)
-                                                    Right _ -> (Right s, st) 
+                      SynStmtAttr sa -> case checkAttr st $ ignorepos sa of
+                                          Left msg -> (Left msg, st)
+                                          Right _ -> (Right s, st) 
                       SynStmtDefAttr sda -> (Right s, st)
                       SynStmtIf si -> (Right s, st)
                       SynStmtWhile sw -> (Right s, st)
