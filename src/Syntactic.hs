@@ -49,32 +49,73 @@ synident = syntoken $
             (LexIdent s) -> Just (SynIdent s)
             _ -> Nothing
 
--- | Syntactic construct for identifier
-data SynType = SynType { getTypeIdent :: (Located SynIdent) } 
-             | SynTypeGen deriving (Show)
+{--This aux function it's temporary.--}
+getLabelFromType :: SynType -> String
+getLabelFromType t = getlabel . ignorepos . getTypeIdent $ t
 
+data SynAnnotation = SynAnnotation { getModifier :: (Located SynToken) 
+                                   , getRef :: (Maybe (Located SynToken))
+                                   } deriving (Show)
+
+synannotation :: SynParser SynAnnotation
+synannotation = locate $
+  do tok <- synlex LexModMut <|> synlex LexModConst 
+     ra   <- fmap Just (synlex LexRef) <|> return Nothing
+     return $ SynAnnotation tok ra
+
+-- | Syntactic construct for type 
+data SynType = SynTypeNGen{ getAnnotation :: (Maybe(Located SynAnnotation))
+                          , getTypeIdent :: (Located SynIdent)}
+             | SynTypeGen { getAnnotation :: (Maybe(Located SynAnnotation))
+                          , getTypeIdent :: (Located SynIdent)
+                          , getTypeArgs  :: (Located SynTypeList) }deriving (Show)
 
 instance Typed SynType where
     toType tp = strToType . getName . getTypeIdent $ tp
 
 
-{--
-This aux function it's temporary. LUIS: FIX.
---}
-getLabelFromType :: SynType -> String
-getLabelFromType t = getlabel . ignorepos . getTypeIdent $ t
+-- | SynParser of type
+syntype :: SynParser SynType
+syntype = try syntypegen <|> syntypengen
 
--- | SynParser 
-syntype:: SynParser SynType
-syntype = locate $
-  do name <- synident
-     return $ SynType name
 
+-- | SynParser of a non generic type
+syntypengen:: SynParser SynType
+syntypengen = locate $
+  do extension <- fmap Just synannotation <|> return Nothing
+     name <- synident
+     return $ SynTypeNGen extension name
+
+-- | SynParser of a generic type. 
+-- Example: struct<int, float>
+syntypegen:: SynParser SynType
+syntypegen = locate $
+  do extension <- fmap Just synannotation <|> return Nothing
+     name <- synident
+     args <- synttype
+     return $ SynTypeGen extension name args
+
+-- | Syntactic construct for list of syntype 
 data SynTypeList = SynTypeList { gettypelist :: [Located SynType] } deriving (Show)
 
 syntypelist :: SynSpecParser SynTypeList
 syntypelist = fmap SynTypeList (syntype `sepBy` (synlex LexComma))
 
+-- <t1, t2, t3>
+syntident :: SynParser SynIdentList
+syntident = locate $
+  do synlex LexLT
+     formalParam <- fmap getidentlist synidentlist
+     synlex LexGT
+     return $ SynIdentList formalParam
+
+-- <int, float, bool>
+synttype :: SynParser SynTypeList
+synttype = locate $
+  do synlex LexLT
+     formalParam <- fmap gettypelist syntypelist
+     synlex LexGT
+     return $ SynTypeList formalParam
 
 -- | Syntactic construct for identifiers list
 data SynIdentList = SynIdentList { getidentlist :: [Located SynIdent] } deriving (Show)
@@ -105,6 +146,10 @@ synTypedIdentL = do var <- fmap getidentlist synidentlist
 -- | Syntactic construct for typed identifier list
 data SynTypedIdentList = SynTypedIdentList { gettypedidentlist :: [SynTypedIdent] }
 
+
+instance TypedList SynTypedIdentList where
+  toTypeList = map toType . gettypedidentlist
+  
 -- | SynParser for list of identifiers
 synTypedIdentList :: SynSpecParser SynTypedIdentList
 synTypedIdentList = fmap (SynTypedIdentList . concat) (synTypedIdentL `sepBy` (synlex LexComma))
@@ -148,6 +193,32 @@ synlitbool = syntoken $
             (LexLitBool b) -> Just (SynLitBool b)
             _ -> Nothing
 
+-- | Syntactic construct for 'struct'
+data SynStruct = SynStruct { getTemplateIdent :: (Maybe (Located SynIdentList))
+                            ,getStructName :: (Located SynIdent)
+                            ,getTuple :: [SynTypedIdent]
+                           } deriving (Show)
+
+-- | SynParser for 'struct'
+synstruct :: SynParser SynStruct
+synstruct = locate $
+  do synlex LexStruct
+     formalParam <- fmap Just syntident <|> return Nothing
+     name <- synident
+     synlex LexAttr
+     synlex LexLParen
+     i <- fmap gettypedidentlist synTypedIdentList 
+     synlex LexRParen
+     synlex LexSemicolon
+     return $ SynStruct formalParam name i
+
+instance Typed SynStruct where
+    toType (SynStruct _ n tis) = StructType (getName n) (map extr tis)
+        where extr ti = (getName ti, toType ti)
+
+instance Named SynStruct where
+    getName (SynStruct _ n _) = getName n
+
 -- = Definitions
 
 -- | Syntactic construct for definition
@@ -174,6 +245,7 @@ data SynAttr = SynAttr { getAttrVars :: [Located SynIdent]
                          } deriving (Show)
 
 -- | SynParser for attribution
+-- TODO: accept to struct. Example: `p = (4.0, 2.0, 1.0);`
 synattr :: SynParser SynAttr
 synattr = locate $
   do var <- fmap getidentlist synidentlist
@@ -218,9 +290,11 @@ data SynStmt = SynStmtDef (Located SynDef)
              | SynStmtAttr (Located SynAttr)
              | SynStmtDefAttr (Located SynDefAttr)
              | SynStmtIf (Located SynIf)
+             | SynStmtFor (Located SynFor)
              | SynStmtWhile (Located SynWhile)
              | SynStmtCall (Located SynCall)
-             | SynStmtFor (Located SynFor)
+             | SynStmtFunc (Located SynFunc)
+             | SynStmtProc (Located SynProc)
 
 instance Show SynStmt where
     show (SynStmtDef  x) = show x ++ "\n"
@@ -230,6 +304,8 @@ instance Show SynStmt where
     show (SynStmtCall x) = show x ++ "\n"
     show (SynStmtDefAttr x) = show x ++ "\n"
     show (SynStmtFor x) = show x ++ "\n"
+    show (SynStmtFunc x) = show x ++ "\n"
+    show (SynStmtProc x) = show x ++ "\n"
 
 synstmt :: SynParser SynStmt
 synstmt = locate $ try (fmap SynStmtDef syndef) 
@@ -241,6 +317,8 @@ synstmt = locate $ try (fmap SynStmtDef syndef)
                <|> fmap SynStmtWhile synwhile
                <|> try (fmap SynStmtFor synfor)
                <|> fmap SynStmtFor synforp
+               <|> fmap SynStmtFunc synfunc
+               <|> fmap SynStmtProc synproc
 
 
 -- | Syntactic construct for block
@@ -311,18 +389,22 @@ synwhile = locate $
 
 -- == for
 -- | Syntactic construct for 'for'
-data SynFor = SynFor (Located SynIdent) (Located SynExpr) (Located SynBlock)
+data SynFor = SynForNP (Located SynIdent) (Located SynExpr) (Located SynBlock)
             | SynForP [Located SynIdent] [Located SynExpr] (Located SynBlock) deriving (Show)
 
 -- | SynParser for 'for'
 synfor :: SynParser SynFor
-synfor = locate $
+synfor = try synforp <|> synfornp
+
+-- | SynParser of natural for
+synfornp :: SynParser SynFor
+synfornp = locate $
   do synlex LexFor
      i <- synident
      synlex LexIn
      range <- synexpr
      content <- synblock
-     return $ SynFor i range content
+     return $ SynForNP i range content
 
 -- | SynParser for parallel for
 synforp :: SynParser SynFor
@@ -334,31 +416,9 @@ synforp = locate $
      content <- synblock
      return $ SynForP i expr content
 
--- | Syntactic construct for 'struct'
-data SynStruct = SynStruct (Located SynIdent) [SynTypedIdent] deriving (Show)
-
--- | SynParser for 'struct'
-synstruct :: SynParser SynStruct
-synstruct = locate $
-  do synlex LexStruct
-     name <- synident
-     synlex LexAttr
-     synlex LexLParen
-     i <- fmap gettypedidentlist synTypedIdentList
-     synlex LexRParen
-     synlex LexSemicolon
-     return $ SynStruct name i
-
-instance Typed SynStruct where
-    toType (SynStruct n tis) = StructType (getName n) (map extr tis)
-        where extr ti = (getName ti, toType ti)
-
-instance Named SynStruct where
-    getName (SynStruct n _) = getName n
-
-
 -- | Syntactic construct for 'proc'
 data SynProc = SynProc { getProcIdent :: (Located SynIdent)
+                       , getProcTemplateType :: (Maybe (Located SynIdentList))
                        , getProcArgs ::  [SynTypedIdent]
                        , getProcBlock :: (Located SynBlock)
                        } deriving (Show)
@@ -374,18 +434,20 @@ instance Named SynProc where
 synproc :: SynParser SynProc
 synproc = locate $
   do synlex LexProc
+     ttype <- fmap Just syntident <|> return Nothing
      name <- synident
      synlex LexLParen
      i <- fmap gettypedidentlist synTypedIdentList
      synlex LexRParen
      content <- synblock
-     return $ SynProc name i content
+     return $ SynProc name ttype i content
 
 getProcName :: SynProc -> String
 getProcName p = getlabel . ignorepos . getProcIdent $ p
 
 -- | Syntactic construct for 'func'
 data SynFunc = SynFunc { getFuncIdent :: (Located SynIdent) 
+                       , getTemplateType :: (Maybe (Located SynIdentList))
                        , getFuncArgs :: [SynTypedIdent]  
                        , getFuncRet :: [SynTypedIdent]
                        , getFuncBlock :: (Located SynBlock)
@@ -406,14 +468,16 @@ getFuncName f = getlabel . ignorepos . getFuncIdent $ f
 synfunc :: SynParser SynFunc
 synfunc = locate $
   do synlex LexFunc
-     argsreturn <- fmap gettypedidentlist synTypedIdentList
+     ttype <- fmap Just syntident <|> return Nothing
+     argsreturn <- fmap gettypedidentlist synTypedIdentList 
      synlex LexAttr
      name <- synident
      synlex LexLParen
-     i <- fmap gettypedidentlist synTypedIdentList
+     argsparam <- fmap gettypedidentlist synTypedIdentList
      synlex LexRParen
      content <- synblock
-     return $ SynFunc name i argsreturn content
+     return $ SynFunc name ttype argsparam argsreturn content
+
 
 -- | Syntactic construct for expression list
 data SynExprList = SynExprList { getexprlist :: [Located SynExpr] }
@@ -427,20 +491,23 @@ synexprlist = fmap SynExprList $ sepBy synexpr (synlex LexComma)
 
 -- | Syntactic construct for function/procedure call
 data SynCall = SynCall { getFuncId :: Located SynIdent
+                       , getTypeParam :: (Maybe (Located SynIdentList))
                        , getArgList :: SynExprList
                        }
 
 instance Show SynCall where
-    show (SynCall id list) = show id ++ "(" ++ show list ++ ")"
+    show (SynCall id Nothing list) = show id ++ "(" ++ show list ++ ")"
+    show (SynCall id (Just param) list) = show id ++ "<" ++ show param ++ "<(" ++ show list ++ ")"
 
 -- | SynParser for function call
 syncall :: SynParser SynCall
 syncall = locate $
     do fid <- synident
+       template <- fmap Just syntident <|> return Nothing
        synlex LexLParen
        exprs <- synexprlist
        synlex LexRParen
-       return $ SynCall fid exprs
+       return $ SynCall fid template exprs
 
 
 -- | SynParser for procedure call

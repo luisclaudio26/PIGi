@@ -340,13 +340,13 @@ registerFunc f =
 -- == Struct table auxiliary functions
 
 findType :: SynType -> Exec Type
-findType (SynType locident)
+
+findType (SynTypeNGen _ locident)
   | n == "int" = return IntType
   | n == "float" = return FloatType
   | n == "bool" = return BoolType
   | otherwise = return $ NamedType n
   where n = getName locident
-
 
 -- == Variable table auxiliary functions
 
