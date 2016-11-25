@@ -266,13 +266,36 @@ checkStmt st lvl s = case s of
                       SynStmtWhile sw -> case checkWhile st lvl (ignorepos sw) of
                                           Left msg -> (Left msg, st)
                                           Right _ -> (Right s, st)                     
-                      SynStmtCall sc -> (Right s, st)
+                      SynStmtCall sc -> case checkCall st lvl (ignorepos sc) of 
+                                          Left msg -> (Left msg, st)
+                                          Right _ -> (Right s, st)
                       SynStmtDef sd -> case eitherNewSt of
                                           Right newSt -> (Right s, newSt)
                                           Left msg -> (Left msg, st)
                                         where 
                                           eitherNewSt = stFromDef st lvl def -- PENDING! Statement must carry scope level
                                           def = ignorepos sd
+
+checkCall :: SuperTable -> Int -> SynCall -> Either String SynCall
+checkCall st lvl sc = if ret == True
+                        then if formal == actual 
+                                then Right sc 
+                                else Left ("Parameters type in call '" ++ 
+                                              (show sc) ++ 
+                                              "' do not match with parameters in definition.")
+                        else Left $ (show sc) ++ " is not a procedure."
+                      where
+                        stEntry = searchSTEntry (fst st) (getlabel $ ignorepos $ getFuncId sc)
+                        formal = case stEntry of
+                                  Left msg -> Nothing
+                                  Right l -> Just $ getProcArgTypes l 
+                        actual = case buildExprTypeList st (ignorepos `fmap` (getexprlist $ getArgList sc)) of
+                                  Left msg -> Nothing
+                                  Right l -> Just l
+                        ret = case stEntry of
+                                  Left msg -> False
+                                  Right (Procedure _ _ ) -> True
+                                  Right (Function _ _ _) -> False 
 
 -- [LUIS] FINALLY! Check https://www.schoolofhaskell.com/school/
 -- starting-with-haskell/basics-of-haskell/10_Error_Handling
@@ -335,6 +358,19 @@ searchSymbolTable (h:t) s = case h of
                                                           then Right vtype
                                                           else searchSymbolTable t s
                                 _ -> searchSymbolTable t s
+
+searchSTEntry :: [STEntry] -> String -> Either String STEntry
+searchSTEntry [] s = Left $ "Symbol \"" ++ s ++ "\" was not defined."
+searchSTEntry (h:t) s = case h of
+                          Variable name _ _ -> if name == s
+                                                then Right h
+                                                else searchSTEntry t s
+                          Function name _ _ -> if name == s
+                                                then Right h
+                                                else searchSTEntry t s
+                          Procedure name _ -> if name == s
+                                                then Right h
+                                                else searchSTEntry t s
 
 -- search for the type of the variable in a struct
 searchUserTypeTable :: [UTEntry] -> String -> Either String String
