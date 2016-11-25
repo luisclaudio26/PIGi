@@ -64,6 +64,7 @@ data LexToken = LexLParen         -- ^ @(@ token
               | LexLitInt Int     -- ^ @int@ literal
               | LexLitFloat Float -- ^ @float@ literal
               | LexLitBool Bool   -- ^ @bool@ literal
+              | LexLitStr String  -- ^ @string@ literal
               | LexModule
               | Comment
               deriving (Show, Eq)
@@ -183,10 +184,29 @@ lexint = locate $ do
 lexnumber :: LexParser
 lexnumber = try lexfloat <|> lexint
 
+-- | Parses an escaped string character
+escaped :: Parsec String () Char
+escaped = do
+    b <- char '\\'
+    c <- oneOf "\\\"nrt"
+    return . read $ ['\'', b, c, '\'']
+
+-- | Parses a non-escaped string character
+nonescaped :: Parsec String () Char
+nonescaped = noneOf "\\\0\n\r\t\""
+
+-- | Parses a string literal
+lexstr :: LexParser
+lexstr = locate $ do 
+    char '\"'
+    str <- many (escaped <|> nonescaped)
+    char '\"'
+    return $ LexLitStr str
+
 -- | Parses any valid lexical token
 lexunit :: LexParser
 lexunit = do
-    tk <- try lexnumber <|> try lexident <|> lexreserved
+    tk <- lexstr <|> try lexnumber <|> try lexident <|> lexreserved
     spaces
     return tk
 
@@ -197,7 +217,6 @@ comment = locate $ do
     manyTill anyChar newline
     spaces
     return Comment
-
 
 -- | PIG full lexical parser
 lexparser :: Parsec String () [PosLexToken]

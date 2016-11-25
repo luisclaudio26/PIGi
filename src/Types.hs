@@ -11,6 +11,7 @@ data Type = Placeholder String -- ^ template argument
           | IntType
           | FloatType
           | BoolType
+          | StrType
           | NamedType Name -- struct type, unbinded
           | StructType Name [(Name, Type)]
           | MatType
@@ -44,6 +45,7 @@ strToType :: String -> Type
 strToType "int" = IntType
 strToType "bool" = BoolType
 strToType "float" = FloatType
+strToType "string" = StrType
 strToType "mat" = MatType
 strToType name = NamedType name
 

@@ -5,6 +5,7 @@ import Data.Foldable
 import Control.Monad
 import Exec.Prim
 import PosParsec
+import Types
 import Syntactic
 
 -- = Expressions
@@ -69,8 +70,9 @@ modVal (FloatVal f1) (FloatVal f2) = return $ FloatVal $ f1 - f2 * (fromInteger 
 plusVal :: Val -> Val -> Exec Val
 plusVal (IntVal i1) (IntVal i2) = return $ IntVal $ i1 + i2
 plusVal (FloatVal f1) (FloatVal f2) = return $ FloatVal $ f1 + f2
+plusVal (StrVal s1) (StrVal s2) = return $ StrVal $ s1 ++ s2
 plusVal (MatVal _ _ mat1) (MatVal _ _ mat2) = matBinOp plusVal mat1 mat2
-
+plusVal v1 v2 = typeError "sum" v1 v2 
 
 -- | Execution to subtract two values
 minusVal :: Val -> Val -> Exec Val
@@ -189,3 +191,10 @@ matBinOp :: (Val -> Val -> Exec Val) -- ^ scalar operation
          -> Exec Val
 matBinOp op mat1 mat2 = fmap mkMat $ zipWithM (zipWithM op) mat1 mat2
 
+
+-- | Type giving error msg
+typeError :: String -> Val -> Val -> a
+typeError op v1 v2 = error $
+    "invalid " ++ op ++ " between " ++ t1 ++ " and " ++ t2
+    where t1 = show $ toType v1
+          t2 = show $ toType v2
