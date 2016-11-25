@@ -2,6 +2,7 @@ module Syntactic where
 
 import Control.Monad.Identity
 import Data.List
+import Data.Maybe
 import Text.Parsec (eof, sepBy)
 import Text.Parsec.Prim
 import Text.Parsec.Expr
@@ -53,15 +54,17 @@ synident = syntoken $
 getLabelFromType :: SynType -> String
 getLabelFromType t = getlabel . ignorepos . getTypeIdent $ t
 
-data SynAnnotation = SynAnnotation { getModifier :: (Located SynToken) 
-                                   , getRef :: (Maybe (Located SynToken))
+data SynAnnotation = SynAnnotation { getModifier :: Maybe (Located SynToken) 
+                                   , getRef :: Maybe (Located SynToken)
                                    } deriving (Show)
 
 synannotation :: SynParser SynAnnotation
 synannotation = locate $
-  do tok <- synlex LexModMut <|> synlex LexModConst 
-     ra   <- fmap Just (synlex LexRef) <|> return Nothing
-     return $ SynAnnotation tok ra
+    do tok <- fmap Just (synlex LexModMut)
+          <|> fmap Just (synlex LexModConst)
+          <|> return Nothing
+       ra <- fmap Just (synlex LexRef) <|> return Nothing
+       return $ SynAnnotation tok ra
 
 -- | Syntactic construct for type 
 data SynType = SynTypeNGen{ getAnnotation :: (Maybe(Located SynAnnotation))
@@ -72,6 +75,18 @@ data SynType = SynTypeNGen{ getAnnotation :: (Maybe(Located SynAnnotation))
 
 instance Typed SynType where
     toType tp = strToType . getName . getTypeIdent $ tp
+
+instance AnnotatedTyped SynType where
+    toAnnType tp = AnnotatedType (toType tp) anns
+        where
+            msynann = getAnnotation tp
+            anns = case msynann of
+                     Nothing -> []
+                     Just locsynann ->
+                         let synann = ignorepos locsynann
+                          in if isNothing (getRef synann)
+                             then []
+                             else [Ref]
 
 
 -- | SynParser of type
@@ -129,10 +144,14 @@ data SynTypedIdent = SynTypedIdent { getTypedIdentName :: (Located SynIdent)
                                    , getTypedIdentType :: (Located SynType) } deriving (Show)
 
 instance Typed SynTypedIdent where
-    toType tid = toType $ getTypedIdentType tid
+    toType = toType . getTypedIdentType
 
 instance Named SynTypedIdent where
     getName = getName . getTypedIdentName
+
+instance AnnotatedTyped SynTypedIdent where
+    toAnnType = toAnnType . getTypedIdentType
+
 
 synTypedIdentL :: SynSpecParser [SynTypedIdent]
 synTypedIdentL = do var <- fmap getidentlist synidentlist
@@ -425,7 +444,7 @@ data SynProc = SynProc { getProcIdent :: (Located SynIdent)
 
 
 instance Typed SynProc where
-    toType p = ProcType $ toTypeList $ getProcArgs p
+    toType p = ProcType $ map toAnnType $ getProcArgs p
 
 instance Named SynProc where
     getName p = getName $ getProcIdent p
@@ -454,8 +473,8 @@ data SynFunc = SynFunc { getFuncIdent :: (Located SynIdent)
                        } deriving (Show)
 
 instance Typed SynFunc where
-    toType f = let rettypes = (toTypeList $ getFuncRet f)
-                   argtypes = (toTypeList $ getFuncArgs f) 
+    toType f = let rettypes = (map toType $ getFuncRet f)
+                   argtypes = (map toAnnType $ getFuncArgs f) 
                 in FuncType rettypes argtypes 
 
 instance Named SynFunc where

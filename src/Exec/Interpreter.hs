@@ -244,14 +244,19 @@ runBlock locblock =
 -- = Subprograms
 
 -- | Add procedure/function arguments to variable table
-registerArgs :: [SynTypedIdent] -> [Val] -> Exec ()
-registerArgs formalArgs values =
-    let regVar :: SynTypedIdent -> Val -> Exec ()
-        regVar tid val =
-            do let vname = getlabel . ignorepos . getTypedIdentName $ tid
-               vtype <- findType . ignorepos . getTypedIdentType $ tid
-               registerLocalVar vname vtype val
-     in sequence_ $ zipWith regVar formalArgs values
+registerArgs :: [SynTypedIdent] -> [(Val, Maybe MemLoc)] -> Exec ()
+registerArgs formalArgs vals =
+    zipWithM_ regVar formalArgs vals
+    where
+        regVar :: SynTypedIdent -> (Val, Maybe MemLoc) -> Exec ()
+        regVar tid (val, mloc) =
+            do let vname = getName tid
+                   ref = isRef $ toAnnType tid
+               if ref
+               then case mloc of
+                 Just loc -> registerLocalRef vname (toType val) loc
+                 Nothing -> error "invalid reference expression" 
+               else registerLocalVar vname (toType val) val
 
 
 -- | Add function returns to variable table
@@ -259,10 +264,21 @@ registerRets :: [SynTypedIdent] -> Exec ()
 registerRets rets = 
     let regVar :: SynTypedIdent -> Exec ()
         regVar tid =
-            do let vname = getlabel . ignorepos . getTypedIdentName $ tid
+            do let vname = getName tid
                vtype <- findType . ignorepos . getTypedIdentType $ tid
                registerLocalUndefVar vname vtype
      in mapM_ regVar rets
+
+
+-- | Get address for expression, if lvalue
+-- TODO: Add struct acess
+extrAddr :: LocSynExpr -> Exec (Maybe MemLoc)
+extrAddr locexpr =
+    case expr of
+      (SynIdentExpr locident) ->
+          fmap (Just . getVarAddr) . findVar . getName $ locident
+      _ -> return Nothing
+    where expr = ignorepos locexpr
 
 
 -- == Structures
@@ -271,7 +287,7 @@ registerRets rets =
 mkConstr :: Type -> Func
 mkConstr st@(StructType name ents) = NativeFunc name ftype constr
     where argtypes = map snd ents
-          ftype = FuncType [st] argtypes
+          ftype = FuncType [st] (fmap toAnnType argtypes)
           constr vals = return $ [StructVal st vals]
 
 
@@ -288,14 +304,18 @@ runProc (Proc p) = runBlock $ getProcBlock p
 callProc :: Located SynCall -> Exec ()
 callProc loccall =
     let call = ignorepos loccall
-     in do argValues <- mapM evalExpr (getexprlist . getArgList $ call)
+        args = getexprlist . getArgList $ call
+     in do argAddrs <- mapM extrAddr args
+           argValues <- mapM evalExpr args
            vt <- saveAndClearScope
            let pname = getName . getFuncId $ call
-               ptype = ProcType $ toTypeList argValues
+               argtypes = map toAnnType $ toTypeList argValues
+               ptype = ProcType argtypes
+               argzip = zip argValues argAddrs
            proc <- findProc pname ptype
            case proc of
              (NativeProc _ _ x) -> x argValues
-             (Proc sp) -> do registerArgs (getProcArgs sp) argValues
+             (Proc sp) -> do registerArgs (getProcArgs sp) argzip
                              runBlock $ getProcBlock sp
            modifyVarTable vt
 
@@ -307,16 +327,19 @@ callProc loccall =
 callFunc :: Located SynCall -> Exec [Val]
 callFunc loccall =
     let call = ignorepos loccall
-     in do argValues <- mapM evalExpr (getexprlist . getArgList $ call)
+        args = getexprlist . getArgList $ call
+     in do argAddrs <- mapM extrAddr args
+           argValues <- mapM evalExpr args
            vt <- saveAndClearScope
            let argTypes = toTypeList argValues
                fname = getName . getFuncId $ call
+               argzip = zip argValues argAddrs
            func <- findFunc fname argTypes
            rets <- case func of
              (NativeFunc _ _ x) ->
                  x argValues 
              (Func sf) -> do
-                 registerArgs (getFuncArgs sf) argValues
+                 registerArgs (getFuncArgs sf) argzip
                  registerRets (getFuncRet sf) 
                  runBlock $ getFuncBlock sf
                  let retNames = map getName $ getFuncRet sf

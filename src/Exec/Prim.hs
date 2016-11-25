@@ -323,7 +323,8 @@ findFunc :: String -> [Type] -> Exec Func
 findFunc funcname argtypes =
     do funcs <- obtainFuncTable
        let matchname = (==funcname) . getName
-           matchtype = (similar $ FuncType [] argtypes) . toType
+           anntypes = map toAnnType argtypes
+           matchtype = (similar $ FuncType [] anntypes) . toType
            func = find (\f -> matchname f && matchtype f) funcs
        case func of
          Just d -> return d
@@ -372,6 +373,13 @@ registerLocalVar vname vtype vvalue =
 registerLocalUndefVar :: String -> Type -> Exec ()
 registerLocalUndefVar vname vtype =
     registerLocalVar vname vtype None
+
+
+-- | Define local reference
+registerLocalRef :: String -> Type -> MemLoc -> Exec ()
+registerLocalRef vname vtype vaddr =
+    do vt <- obtainVarTable
+       modifyVarTable $ Var vname vtype vaddr (Local 0) : vt
 
 
 -- | Obtain variable value
