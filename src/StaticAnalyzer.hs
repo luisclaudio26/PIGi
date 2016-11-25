@@ -303,9 +303,11 @@ checkCall st lvl sc = if ret == True
 checkWhile :: SuperTable -> Int -> SynWhile -> Either String SynWhile
 checkWhile st lvl sw = case exprOk of
                           Left msg -> Left msg
-                          Right _ -> case blockOk of
-                                        Left msg -> Left msg
-                                        Right _ -> Right sw
+                          Right x -> if x == ["bool"]
+                                      then case blockOk of
+                                              Left msg -> Left msg
+                                              Right _ -> Right sw
+                                      else Left $ "Not a bool expression in 'while " ++ (show $ getWhileCondition sw) ++ "'"
                         where
                           exprOk = checkExpr st (ignorepos $ getWhileCondition sw)
                           blockOk = checkBlock st (lvl+1) (getWhileBlock sw)
