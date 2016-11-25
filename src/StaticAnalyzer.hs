@@ -372,7 +372,6 @@ searchSTEntry (h:t) s = case h of
                                                 then Right h
                                                 else searchSTEntry t s
 
--- search for the type of the variable in a struct
 searchUserTypeTable :: [UTEntry] -> String -> Either String String
 searchUserTypeTable [] s = Left "Variable not defined."
 searchUserTypeTable (h:t) s = case h of
