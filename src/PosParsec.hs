@@ -12,6 +12,9 @@ instance (Show a) => Show (Located a) where
 instance (Typed a) => Typed (Located a) where
     toType loc = toType $ ignorepos loc
 
+instance (AnnotatedTyped a) => AnnotatedTyped (Located a) where
+    toAnnType loc = toAnnType $ ignorepos loc
+
 instance (Named a) => Named (Located a) where
     getName loc = getName $ ignorepos loc
 

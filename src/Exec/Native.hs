@@ -29,16 +29,22 @@ printLn v = do print v
                printStr "\n"
 
 
+annInt = toAnnType IntType
+annFloat = toAnnType FloatType
+annBool = toAnnType BoolType
+annMat = toAnnType MatType
+
+
 nativeProcs :: [Proc]
 nativeProcs =
-    [NativeProc "print" (ProcType [IntType]) print
-    ,NativeProc "print" (ProcType [FloatType]) print
-    ,NativeProc "print" (ProcType [BoolType]) print
-    ,NativeProc "print" (ProcType [MatType]) print
-    ,NativeProc "println" (ProcType [IntType]) printLn
-    ,NativeProc "println" (ProcType [FloatType]) printLn
-    ,NativeProc "println" (ProcType [BoolType]) printLn
-    ,NativeProc "println" (ProcType [MatType]) printLn
+    [NativeProc "print" (ProcType [annInt]) print
+    ,NativeProc "print" (ProcType [annFloat]) print
+    ,NativeProc "print" (ProcType [annBool]) print
+    ,NativeProc "print" (ProcType [annMat]) print
+    ,NativeProc "println" (ProcType [annInt]) printLn
+    ,NativeProc "println" (ProcType [annFloat]) printLn
+    ,NativeProc "println" (ProcType [annBool]) printLn
+    ,NativeProc "println" (ProcType [annMat]) printLn
     ]
 
 -- = Native functions
@@ -85,14 +91,14 @@ floatCast [IntVal i] = return [FloatVal $ fromIntegral i]
 
 nativeFuncs :: [Func]
 nativeFuncs =
-    [NativeFunc "rows" (FuncType [IntType] [MatType]) rows
-    ,NativeFunc "cols" (FuncType [IntType] [MatType]) cols
-    ,NativeFunc "readint" (FuncType [] [IntType]) readInt
-    ,NativeFunc "readfloat" (FuncType [] [FloatType]) readFloat
-    ,NativeFunc "round" (FuncType [IntType] [FloatType]) roundFloat
-    ,NativeFunc "floor" (FuncType [IntType] [FloatType]) floorFloat
-    ,NativeFunc "ceil" (FuncType [IntType] [FloatType]) ceilFloat
-    ,NativeFunc "float" (FuncType [FloatType] [IntType]) floatCast
+    [NativeFunc "rows" (FuncType [IntType] [annMat]) rows
+    ,NativeFunc "cols" (FuncType [IntType] [annMat]) cols
+    ,NativeFunc "readint" (FuncType [] [annInt]) readInt
+    ,NativeFunc "readfloat" (FuncType [] [annFloat]) readFloat
+    ,NativeFunc "round" (FuncType [IntType] [annFloat]) roundFloat
+    ,NativeFunc "floor" (FuncType [IntType] [annFloat]) floorFloat
+    ,NativeFunc "ceil" (FuncType [IntType] [annFloat]) ceilFloat
+    ,NativeFunc "float" (FuncType [FloatType] [annInt]) floatCast
     ]
 
 
