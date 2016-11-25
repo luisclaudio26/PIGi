@@ -228,21 +228,26 @@ checkModStmt st stmt = case stmt of
 
 -- Again: no nested subroutines, so scope level is always 1.
 checkFunc :: SuperTable -> Located SynFunc -> Either String SynFunc
-checkFunc st func = case checkBlock st 1 $ getFuncBlock unlocFunc of
-                        Right _ -> Right unlocFunc
-                        Left msg -> Left msg
-                      where unlocFunc = ignorepos func
+checkFunc st func = do stWithArgs <- stFromTypedIdentList st lvl funcArgs
+                       stWithRet <- stFromTypedIdentList stWithArgs lvl funcRet
+                       checkBlock stWithRet lvl funcBlock
+                       return $ ignorepos func
+                    where
+                      lvl = 1
+                      funcArgs = getFuncArgs $ ignorepos func
+                      funcRet = getFuncRet $ ignorepos func
+                      funcBlock = getFuncBlock $ ignorepos func
 
 checkProc :: SuperTable -> Located SynProc -> Either String SynProc
 checkProc st proc = case checkBlock newSt lvl $ getProcBlock unlocProc of
-                    Right _ -> Right unlocProc
-                    Left msg -> Left msg
-                  where lvl = 1
-                        unlocProc = ignorepos proc
-                        newSt = case stFromTypedIdentList st lvl (getProcArgs $ ignorepos proc) of
-                                  Right newSt' -> newSt'
-                                  Left msg -> st -- PENDING: We should do something to throw message in case
-                                                 -- of error here!
+                      Right _ -> Right unlocProc
+                      Left msg -> Left msg
+                    where lvl = 1
+                          unlocProc = ignorepos proc
+                          newSt = case stFromTypedIdentList st lvl (getProcArgs $ ignorepos proc) of
+                                    Right newSt' -> newSt'
+                                    Left msg -> st -- PENDING: We should do something to throw message in case
+                                                   -- of error here!
 
 checkBlock :: SuperTable -> Int -> Located SynBlock -> Either String SynBlock
 checkBlock st lvl block = case checkedStmts of
