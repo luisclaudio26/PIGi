@@ -212,6 +212,19 @@ synlitbool = syntoken $
             (LexLitBool b) -> Just (SynLitBool b)
             _ -> Nothing
 
+-- | Syntactic construct for boolean literal
+data SynLitStr = SynLitStr { getstr :: String }
+
+instance Show SynLitStr where
+    show = show . getstr
+
+-- | SynParser for boolean literal
+synlitstr :: SynParser SynLitStr
+synlitstr = syntoken $
+    \t -> case t of
+            (LexLitStr b) -> Just (SynLitStr b)
+            _ -> Nothing
+
 -- | Syntactic construct for 'struct'
 data SynStruct = SynStruct { getTemplateIdent :: (Maybe (Located SynIdentList))
                             ,getStructName :: (Located SynIdent)
@@ -543,6 +556,7 @@ data SynExpr = SynIdentExpr (Located SynIdent)
              | SynLitIntExpr (Located SynLitInt)
              | SynLitFloatExpr (Located SynLitFloat)
              | SynLitBoolExpr (Located SynLitBool)
+             | SynLitStrExpr (Located SynLitStr)
              | SynCallExpr (Located SynCall)
              | SynArrow    LocSynExpr (Located SynIdent)
              | SynPar      LocSynExpr
@@ -618,6 +632,7 @@ instance Show SynExpr where
     show (SynLitIntExpr lit) = show lit
     show (SynLitFloatExpr lit) = show lit
     show (SynLitBoolExpr lit) = show lit
+    show (SynLitStrExpr lit) = show lit
     show (SynCallExpr call) = show call
     show (SynMat mat) = show mat
     show (SynIndex x ys) = show x ++ "[" ++ sepys ++ "]"
@@ -640,6 +655,10 @@ synexprLitFloat = locate $ fmap SynLitFloatExpr synlitfloat
 -- | Bool literal expression syntactic parser
 synexprLitBool :: SynParser SynExpr
 synexprLitBool = locate $ fmap SynLitBoolExpr synlitbool
+
+-- | Bool literal expression syntactic parser
+synexprLitStr :: SynParser SynExpr
+synexprLitStr = locate $ fmap SynLitStrExpr synlitstr
 
 -- | Parenthesized expression syntactic parser
 synexprPar :: SynParser SynExpr
@@ -671,6 +690,7 @@ synexprUnit :: SynParser SynExpr
 synexprUnit = synexprPar <|> synexprLitInt
                          <|> synexprLitFloat
                          <|> synexprLitBool
+                         <|> synexprLitStr
                          <|> try synexprCall
                          <|> synexprMat
                          <|> synexprIdent

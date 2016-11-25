@@ -18,6 +18,7 @@ data Scope = Global
 data Val = IntVal Int
          | FloatVal Float
          | BoolVal Bool
+         | StrVal String
          | StructVal Type [Val]
          | MatVal Int Int [[Val]]
          | None
@@ -38,6 +39,7 @@ instance Typed Val where
     toType (IntVal _) = IntType
     toType (FloatVal _) = FloatType
     toType (BoolVal _) = BoolType
+    toType (StrVal _) = StrType
     toType (StructVal t _) = t
     toType (MatVal _ _ _) = MatType
     toType None = NoneType
@@ -346,6 +348,8 @@ findType (SynTypeNGen _ locident)
   | n == "int" = return IntType
   | n == "float" = return FloatType
   | n == "bool" = return BoolType
+  | n == "string" = return StrType
+  | n == "mat" = return MatType
   | otherwise = return $ NamedType n
   where n = getName locident
 

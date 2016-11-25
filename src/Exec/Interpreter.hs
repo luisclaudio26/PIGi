@@ -89,6 +89,9 @@ evalExpr = eval . ignorepos
           eval (SynLitBoolExpr locbool) =
               return $ BoolVal $ getbool . ignorepos $ locbool
 
+          eval (SynLitStrExpr locstr) =
+              return $ StrVal $ getstr . ignorepos $ locstr
+
           eval (SynIdentExpr locident) =
               do obtainVarValue $ getName locident
 

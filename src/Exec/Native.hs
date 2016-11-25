@@ -22,6 +22,7 @@ print [(IntVal i)] = printStr $ show i
 print [(FloatVal f)] = printStr $ show f
 print [(BoolVal b)] = printStr $ show b
 print [(MatVal _ _ mat)] = printStr $ show mat
+print [(StrVal s)] = printStr s
 
 
 printLn :: [Val] -> Exec ()
@@ -33,6 +34,7 @@ annInt = toAnnType IntType
 annFloat = toAnnType FloatType
 annBool = toAnnType BoolType
 annMat = toAnnType MatType
+annStr = toAnnType StrType
 
 
 nativeProcs :: [Proc]
@@ -41,10 +43,12 @@ nativeProcs =
     ,NativeProc "print" (ProcType [annFloat]) print
     ,NativeProc "print" (ProcType [annBool]) print
     ,NativeProc "print" (ProcType [annMat]) print
+    ,NativeProc "print" (ProcType [annStr]) print
     ,NativeProc "println" (ProcType [annInt]) printLn
     ,NativeProc "println" (ProcType [annFloat]) printLn
     ,NativeProc "println" (ProcType [annBool]) printLn
     ,NativeProc "println" (ProcType [annMat]) printLn
+    ,NativeProc "println" (ProcType [annStr]) printLn
     ]
 
 -- = Native functions
@@ -89,6 +93,13 @@ floatCast :: [Val] -> Exec [Val]
 floatCast [IntVal i] = return [FloatVal $ fromIntegral i]
 
 
+strCast :: [Val] -> Exec [Val]
+strCast [IntVal i] = return [StrVal $ show i]
+strCast [FloatVal f] = return [StrVal $ show f]
+strCast [BoolVal b] = return [StrVal $ if b then "true" else "false"]
+strCast [MatVal _ _ mat] = return [StrVal $ show mat]
+
+
 nativeFuncs :: [Func]
 nativeFuncs =
     [NativeFunc "rows" (FuncType [IntType] [annMat]) rows
@@ -99,6 +110,10 @@ nativeFuncs =
     ,NativeFunc "floor" (FuncType [IntType] [annFloat]) floorFloat
     ,NativeFunc "ceil" (FuncType [IntType] [annFloat]) ceilFloat
     ,NativeFunc "float" (FuncType [FloatType] [annInt]) floatCast
+    ,NativeFunc "string" (FuncType [StrType] [annInt]) strCast
+    ,NativeFunc "string" (FuncType [StrType] [annFloat]) strCast
+    ,NativeFunc "string" (FuncType [StrType] [annBool]) strCast
+    ,NativeFunc "string" (FuncType [StrType] [annMat]) strCast
     ]
 
 
