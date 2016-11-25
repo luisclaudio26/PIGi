@@ -258,10 +258,7 @@ syndef = locate $
 -- | Syntactic construct for attribution 
 data SynAttr = SynAttr { getAttrVars :: [Located SynIdent]
                        , getAttrExprs :: [Located SynExpr]
-                       } 
-             | SynOpAttr { getAttrVar :: (Located SynIdent)
-                          ,getAttrExpr :: (Located SynExpr) 
-                         } deriving (Show)
+                       } deriving (Show)
 
 -- | SynParser for attribution
 -- TODO: accept to struct. Example: `p = (4.0, 2.0, 1.0);`
@@ -280,14 +277,18 @@ synopattr = locate $
      stok <- synlex LexPlusAttr <|> synlex LexMinusAttr <|> synlex LexTimesAttr <|> synlex LexDivAttr
      expr <- synexpr
      synlex LexSemicolon
-     return $ SynOpAttr var $
+     return $ SynAttr [var] $
        let varexpr =  mklocated (getpos var) (SynIdentExpr var)
            stokPos = mklocated (getpos stok)
         in case ignorepos stok of 
-             (SynToken LexPlusAttr)  -> stokPos (SynPlus varexpr expr)
-             (SynToken LexMinusAttr) -> stokPos (SynMinus varexpr expr)
-             (SynToken LexTimesAttr) -> stokPos (SynTimes varexpr expr)
-             (SynToken LexDivAttr)   -> stokPos(SynDiv varexpr expr)
+             (SynToken LexPlusAttr)  ->
+                 [stokPos (SynPlus varexpr expr)]
+             (SynToken LexMinusAttr) ->
+                 [stokPos (SynMinus varexpr expr)]
+             (SynToken LexTimesAttr) ->
+                 [stokPos (SynTimes varexpr expr)]
+             (SynToken LexDivAttr)   ->
+                 [stokPos(SynDiv varexpr expr)]
 
 -- = Definition and attribution
 -- | Syntactic construct for definition & attribution
@@ -330,8 +331,8 @@ synstmt :: SynParser SynStmt
 synstmt = locate $ try (fmap SynStmtDef syndef) 
                <|> fmap SynStmtDefAttr syndefattr
                <|> try (fmap SynStmtCall synpcall)
-               <|> try (fmap SynStmtAttr synattr)
-               <|> fmap SynStmtAttr synopattr
+               <|> try (fmap SynStmtAttr synopattr)
+               <|> fmap SynStmtAttr synattr
                <|> fmap SynStmtIf synifstr 
                <|> fmap SynStmtWhile synwhile
                <|> try (fmap SynStmtFor synfor)
