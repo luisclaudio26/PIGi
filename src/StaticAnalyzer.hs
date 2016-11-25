@@ -262,7 +262,9 @@ checkStmt st lvl s = case s of
                                           Left msg -> (Left msg, st)
                                           Right _ -> (Right s, st) 
                       SynStmtDefAttr sda -> (Right s, st)
-                      SynStmtIf si -> (Right s, st)
+                      SynStmtIf si -> case checkIf st lvl (ignorepos si) of
+                                        Left msg -> (Left msg, st)
+                                        Right _ -> (Right s, st) 
                       SynStmtWhile sw -> case checkWhile st lvl (ignorepos sw) of
                                           Left msg -> (Left msg, st)
                                           Right _ -> (Right s, st)                     
@@ -297,6 +299,23 @@ checkCall st lvl sc = if ret == True
                                   Right (Procedure _ _ ) -> True
                                   Right (Function _ _ _) -> False 
 
+checkIf :: SuperTable -> Int -> SynIf -> Either String SynIf
+checkIf st lvl (SynIf [] elseBlock) = case elseBlock of
+                                        Nothing -> Right out
+                                        Just block -> do checkBlock st lvl block
+                                                         return out
+                                      where out = SynIf [] elseBlock
+
+checkIf st lvl (SynIf (expBlk:tail) elseBlock) = do checkExpBlk st lvl expBlk
+                                                    checkIf st lvl (SynIf tail elseBlock)
+
+checkExpBlk :: SuperTable -> Int -> (Located SynExpr, Located SynBlock) -> Either String Bool
+checkExpBlk st lvl (exp, blk) = do t <- checkExpr st (ignorepos exp)
+                                   checkBlock st (lvl+1) blk
+                                   if t == ["bool"] 
+                                    then return True
+                                    else fail $ "Not a bool expression in IF clause: " ++ (show exp)
+
 -- [LUIS] FINALLY! Check https://www.schoolofhaskell.com/school/
 -- starting-with-haskell/basics-of-haskell/10_Error_Handling
 -- for the correct way of dealing with Either.
@@ -307,7 +326,7 @@ checkWhile st lvl sw = case exprOk of
                                       then case blockOk of
                                               Left msg -> Left msg
                                               Right _ -> Right sw
-                                      else Left $ "Not a bool expression in 'while " ++ (show $ getWhileCondition sw) ++ "'"
+                                      else Left $ "Not a bool expression in WHILE clause: " ++ (show $ getWhileCondition sw)
                         where
                           exprOk = checkExpr st (ignorepos $ getWhileCondition sw)
                           blockOk = checkBlock st (lvl+1) (getWhileBlock sw)
