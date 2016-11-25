@@ -287,15 +287,20 @@ checkWhile st lvl sw = case exprOk of
                           exprOk = checkExpr st (ignorepos $ getWhileCondition sw)
                           blockOk = checkBlock st (lvl+1) (getWhileBlock sw)
 
---trocar: naao é s1 == s2, levar em conta o "_" 
 checkAttr :: SuperTable -> SynAttr -> Either String SynAttr
 checkAttr st sa@(SynAttr si se) = case buildIdentTypeList st (ignorepos `fmap` si) of
                                     Left msg -> Left msg
                                     Right s1 -> case buildExprTypeList st (ignorepos `fmap` se) of
                                                   Left msg -> Left msg
-                                                  Right s2 -> if s1 == s2
+                                                  Right s2 -> if typeListsEqual s1 s2
                                                                 then Right sa
                                                                 else Left "Variable and expression have different types in attribution."
+
+typeListsEqual :: [String] -> [String] -> Bool
+typeListsEqual [] [] = True
+typeListsEqual (h1:t1) (h2:t2) = if h1 /= h2 && h1 /= "_"
+                                    then False
+                                    else typeListsEqual t1 t2
            
 buildIdentTypeList :: SuperTable -> [SynIdent] -> Either String [String]
 buildIdentTypeList st [] = Right []
@@ -314,13 +319,13 @@ buildExprTypeList st (h:t) = case checkExpr st h of
                                             Right l -> Right $ s ++ l
 
 identType :: SuperTable -> SynIdent -> Either String String
-identType (syt, utt) si@(SynIdent s) = case t1 of
-                                        Right vtype -> Right vtype
-                                        Left _ -> case t2 of
+identType (syt, utt) si@(SynIdent s) = if s == "_"
+                                          then Right s
+                                          else case searchSymbolTable syt s of
+                                            Right vtype -> Right vtype
+                                            Left _ -> case searchUserTypeTable utt s of
                                                         Right ftype -> Right ftype
-                                                        Left msg -> Left msg
-                                      where t1 = searchSymbolTable syt s
-                                            t2 = searchUserTypeTable utt s
+                                                        Left msg -> Left msg 
 
 -- PENDING !!! [LUÍS] Verificar o nível do símbolo ao buscar
 searchSymbolTable :: [STEntry] -> String -> Either String String
@@ -382,12 +387,11 @@ checkExpr st se = case se of
                                 Right l -> if l == ["bool"]
                                             then Right l
                                             else Left "Operator 'not' expects an operand of type bool."
-                  --mudar "" pra $ getlabel e2
                   SynArrow e1 e2 -> case checkExpr st $ ignorepos e1 of
                                       Left msg -> Left msg
                                       Right l1 -> let s1 = head l1 in
                                                     if T.unpack (T.take 6 (T.pack s1))  == "struct"
-                                                      then searchStructField (snd st) (T.unpack (T.take (length s1 - 7) (T.pack s1))) ""
+                                                      then searchStructField (snd st) (T.unpack (T.take (length s1 - 7) (T.pack s1))) $ getlabel $ ignorepos e2
                                                       else Left "Operator '->' expects a struct as a left operand."
                   SynExp e1 e2 -> case checkExpr st $ ignorepos e1 of
                                     Left msg -> Left msg
@@ -649,7 +653,55 @@ checkExpr st se = case se of
                                                           Right l2 -> if l2 == ["bool"]
                                                                         then Right l1
                                                                         else Left "Operator 'or' expects operands of type bool."
-                                                  else Left "Operator 'or' expects operands of type bool."    
+                                                  else Left "Operator 'or' expects operands of type bool." 
+                  SynIndex e1 e2 -> case checkExpr st $ ignorepos e1 of
+                                    Left msg -> Left msg
+                                    Right l1 -> if l1 == ["vec"] || l1 == ["vec2"] || l1 == ["vec3"] || l1 == ["vec4"]
+                                                  then if length e2 == 1
+                                                        then case checkExpr st $ ignorepos $ head e2 of
+                                                              Left msg -> Left msg
+                                                              Right l2 -> if l2 == ["int"]
+                                                                            then Right ["float"]
+                                                                            else Left "Index has to by o type int."
+                                                        else Left "Vectors can only be accessed with one index."
+                                                  else if l1 == ["mat"] || l1 == ["mat2"] || l1 == ["mat3"] || l1 == ["mat4"]
+                                                          then if length e2 == 2
+                                                                  then case checkExpr st $ ignorepos $ head e2 of
+                                                                          Left msg -> Left msg
+                                                                          Right l2 -> if l2 == ["int"]
+                                                                                        then case checkExpr st $ ignorepos $ last e2 of
+                                                                                                Left msg -> Left msg
+                                                                                                Right l3 -> if l3 == ["int"]
+                                                                                                              then Right ["float"]
+                                                                                                              else Left "Index has to by o type int."
+                                                                                        else Left "Index has to by o type int."
+                                                                  else Left "Matrices can only be accessed with two indexes."
+                                                          else Left "You need a vector or matrix to access through indexes." 
+                  --always of type mat
+                  SynMat e1 -> if length e1 > 0
+                                then if (length $ head e1) > 0
+                                        then case checkMatrix st e1 (length $ head e1) of
+                                                Left msg -> Left msg
+                                                Right _ -> Right ["mat"]
+                                        else Left "Matrix needs at least one element."
+                                else Left "Matrix needs at least one element."
+
+checkMatrix :: SuperTable -> [[LocSynExpr]] -> Int -> Either String String
+checkMatrix st [] n = Right ""
+checkMatrix st (h:t) n = if length h /= n
+                            then Left "Matrix needs all lines with same number of columns."
+                            else case checkMatrixLines st h of
+                                  Left msg -> Left msg
+                                  Right _ -> checkMatrix st t n
+
+checkMatrixLines :: SuperTable -> [LocSynExpr] -> Either String String
+checkMatrixLines st [] = Right ""
+checkMatrixLines st (h:t) = case checkExpr st $ ignorepos h of
+                              Left msg -> Left msg
+                              Right l1 -> if l1 == ["float"]
+                                            then checkMatrixLines st t
+                                            else Left "Fields of a matrix must be of type float."
+
 
 findFuncRetTypes :: [STEntry] -> String -> Either String [String]
 findFuncRetTypes [] s = Left "Function not defined."
