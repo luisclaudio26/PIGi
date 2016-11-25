@@ -1,7 +1,11 @@
 module Main(main) where
 
 import System.Environment
+import System.Exit
 import Text.Parsec (parse)
+import Text.Parsec.Error
+import Text.Parsec.Pos
+import Control.Monad
 import PosParsec
 import Lexical
 import Syntactic
@@ -15,13 +19,30 @@ runinterpreter mod =
        return ()
 
 
-runsynparser :: [PosLexToken] -> String -> IO (Located SynModule)
-runsynparser tokens filename =
+showParserError :: String -> String -> ParseError -> IO ()
+showParserError input mode parseError =
+    do putStrLn errorPosMsg
+       putStrLn errorSource
+       putStrLn errorPointer
+       putStrLn errorDetails
+    where
+        pos = errorPos (parseError)
+        errorPosMsg = mode ++ " error at " ++ show pos
+        getInputLine i = lines input !! (i - 1)
+        errorSource = getInputLine (sourceLine pos)
+        errorPointer = replicate (sourceColumn pos - 1) ' ' ++ "^"
+        errorDetails = showErrorMessages "or" "unknown parse error"
+                                   "expecting" "unexpected" "end of input"
+                                   (errorMessages parseError) 
+
+
+runsynparser :: [PosLexToken] -> String -> String -> IO (Located SynModule)
+runsynparser tokens input filename =
     do let result = parse synmodule filename tokens
-       case result of
-            Left msg -> do print msg
-                           fail "syntactic error"
-            Right syntree -> return syntree
+       case result of 
+         Left msg -> do showParserError input "syntactic" msg
+                        exitWith $ ExitFailure 1
+         Right syntree -> return syntree
 
 -- TODO: receive a list of SynModules, apply semModule to
 -- each one.
@@ -46,8 +67,8 @@ runlexparser :: String -> String -> IO [PosLexToken]
 runlexparser filename input =
     let result = parse lexparser filename input
     in case result of
-         Left msg -> do print msg
-                        fail "lexical error"
+         Left msg -> do showParserError input "lexical" msg
+                        exitWith $ ExitFailure 1
 
          Right tokens -> return tokens
 
@@ -59,7 +80,8 @@ run args =
        if elem "-l" opts
           then printlex lex
           else return ()
-       syn <- fmap ignorepos (runsynparser lex filename)
+
+       syn <- fmap ignorepos (runsynparser lex file filename)
        if elem "-s" opts
           then printsyn syn
           else return ()
@@ -81,5 +103,4 @@ run args =
 
 
 main :: IO ()
-main = do putStrLn "<< PIG language interpreter >>"
-          getArgs >>= run 
+main = getArgs >>= run 
