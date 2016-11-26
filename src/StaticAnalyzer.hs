@@ -24,6 +24,18 @@ data STEntry = Variable { getVarId :: String    -- identifier
 
 type SymbolTable = [STEntry]
 
+symbolTable :: SymbolTable
+symbolTable = [Procedure "print" ["int"]
+              ,Procedure "print" ["float"]
+              ,Procedure "print" ["mat"]
+              ,Procedure "print" ["bool"]
+              ,Procedure "print" ["string"]
+              ,Procedure "println" ["int"]
+              ,Procedure "println" ["float"]
+              ,Procedure "println" ["mat"]
+              ,Procedure "println" ["bool"]
+              ,Procedure "println" ["string"] ]
+
 data Field = Field { getFieldName :: String
                    , getFieldType :: String } deriving (Show)
 
@@ -42,7 +54,8 @@ typeTable = [ Primitive "int"
             , Primitive "mat"
             , Primitive "mat2"
             , Primitive "mat3"
-            , Primitive "mat4"]
+            , Primitive "mat4"
+            , Primitive "string"]
 
 type UserTypeTable = [UTEntry]
 
@@ -186,7 +199,7 @@ semModule' (rule:tail) x  = (semModule' tail x) >>= rule -}
 -- Haskell compiler does.
 --
 checkMod :: SynModule -> Either String SynModule
-checkMod sm@(SynModule id stmts) = case stFromModule ([], typeTable) sm of
+checkMod sm@(SynModule id stmts) = case stFromModule (symbolTable, typeTable) sm of
                                     Left msg -> Left msg
                                     Right st -> case checkModStmts st stmts of
                                                   Right _ -> Right (SynModule id stmts)
@@ -214,21 +227,26 @@ checkModStmt st stmt = case stmt of
 
 -- Again: no nested subroutines, so scope level is always 1.
 checkFunc :: SuperTable -> Located SynFunc -> Either String SynFunc
-checkFunc st func = case checkBlock st 1 $ getFuncBlock unlocFunc of
-                        Right _ -> Right unlocFunc
-                        Left msg -> Left msg
-                      where unlocFunc = ignorepos func
+checkFunc st func = do stWithArgs <- stFromTypedIdentList st lvl funcArgs
+                       stWithRet <- stFromTypedIdentList stWithArgs lvl funcRet
+                       checkBlock stWithRet lvl funcBlock
+                       return $ ignorepos func
+                    where
+                      lvl = 1
+                      funcArgs = getFuncArgs $ ignorepos func
+                      funcRet = getFuncRet $ ignorepos func
+                      funcBlock = getFuncBlock $ ignorepos func
 
 checkProc :: SuperTable -> Located SynProc -> Either String SynProc
 checkProc st proc = case checkBlock newSt lvl $ getProcBlock unlocProc of
-                    Right _ -> Right unlocProc
-                    Left msg -> Left msg
-                  where lvl = 1
-                        unlocProc = ignorepos proc
-                        newSt = case stFromTypedIdentList st lvl (getProcArgs $ ignorepos proc) of
-                                  Right newSt' -> newSt'
-                                  Left msg -> st -- PENDING: We should do something to throw message in case
-                                                 -- of error here!
+                      Right _ -> Right unlocProc
+                      Left msg -> Left msg
+                    where lvl = 1
+                          unlocProc = ignorepos proc
+                          newSt = case stFromTypedIdentList st lvl (getProcArgs $ ignorepos proc) of
+                                    Right newSt' -> newSt'
+                                    Left msg -> st -- PENDING: We should do something to throw message in case
+                                                   -- of error here!
 
 checkBlock :: SuperTable -> Int -> Located SynBlock -> Either String SynBlock
 checkBlock st lvl block = case checkedStmts of
@@ -278,25 +296,15 @@ checkStmt st lvl s = case s of
                                           def = ignorepos sd
 
 checkCall :: SuperTable -> Int -> SynCall -> Either String SynCall
-checkCall st lvl sc = if ret == True
-                        then if formal == actual 
-                                then Right sc 
-                                else Left ("Parameters type in call '" ++ 
-                                              (show sc) ++ 
-                                              "' do not match with parameters in definition.")
-                        else Left $ (show sc) ++ " is not a procedure."
-                      where
-                        stEntry = searchSTEntry (fst st) (getlabel $ ignorepos $ getFuncId sc)
-                        formal = case stEntry of
-                                  Left msg -> Nothing
-                                  Right l -> Just $ getProcArgTypes l 
-                        actual = case buildExprTypeList st (ignorepos `fmap` (getexprlist $ getArgList sc)) of
-                                  Left msg -> Nothing
-                                  Right l -> Just l
-                        ret = case stEntry of
-                                  Left msg -> False
-                                  Right (Procedure _ _ ) -> True
-                                  Right (Function _ _ _) -> False 
+checkCall st lvl sc = do stEntry <- searchSTEntry (fst st) procName
+                         procArgs <- buildExprTypeList st (ignorepos `fmap` (getexprlist $ getArgList sc))
+                         case stEntry of
+                            Procedure _ _ -> if (procInST (fst st) procName procArgs) == True
+                                              then return sc
+                                              else fail $ "No such procedure: " ++ (show procName) ++ "(" ++ (show procArgs) ++ ")."
+                            _ -> fail $ "Not a procedure: " ++ (show sc)
+                      where 
+                        procName = (getlabel $ ignorepos $ getFuncId sc)
 
 checkIf :: SuperTable -> Int -> SynIf -> Either String SynIf
 checkIf st lvl (SynIf [] elseBlock) = case elseBlock of
@@ -391,6 +399,18 @@ searchSTEntry (h:t) s = case h of
                           Procedure name _ -> if name == s
                                                 then Right h
                                                 else searchSTEntry t s
+
+-- This new function takes into account the type (this was needed
+-- to implement procedure overloading)
+procInST :: [STEntry] -> String -> [String] -> Bool
+procInST [] pName pArgs = False
+procInST (h:t) pName pArgs = case h of
+                              Variable _ _ _ -> searchTheRest
+                              Function _ _ _ -> searchTheRest
+                              Procedure name args -> if name == pName && args == pArgs
+                                                        then True
+                                                        else searchTheRest
+                             where searchTheRest = procInST t pName pArgs 
 
 searchUserTypeTable :: [UTEntry] -> String -> Either String String
 searchUserTypeTable [] s = Left "Variable not defined."
