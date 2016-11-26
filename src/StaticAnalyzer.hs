@@ -3,7 +3,6 @@ module StaticAnalyzer where
 import Syntactic
 import PosParsec(ignorepos, Located)
 import Types
-import qualified Data.Text as T
 
 --------------------------------------
 --------- Build symbol table ---------
@@ -421,9 +420,10 @@ checkExpr st se = case se of
                   SynIdentExpr e -> case identType st $ ignorepos e of
                                       Left msg -> Left msg
                                       Right vtype -> Right $ vtype : []
-                  SynLitIntExpr _ -> Right $ "int" : []
-                  SynLitFloatExpr _ -> Right $ "float" : []
-                  SynLitBoolExpr _ -> Right $ "bool" : []
+                  SynLitIntExpr _ -> Right ["int"]
+                  SynLitFloatExpr _ -> Right ["float"]
+                  SynLitBoolExpr _ -> Right ["bool"]
+                  SynLitStrExpr _ -> Right ["string"]
                   SynCallExpr e -> case findFuncRetTypes (fst st) $ getlabel $ ignorepos $ getFuncId $ ignorepos e of
                                       Left msg -> Left msg
                                       Right ftype -> Right ftype
@@ -445,9 +445,8 @@ checkExpr st se = case se of
                                             else Left "Operator 'not' expects an operand of type bool."
                   SynArrow e1 e2 -> case checkExpr st $ ignorepos e1 of
                                       Left msg -> Left msg
-                                      Right l1 -> let s1 = head l1 in
-                                                    if T.unpack (T.take 6 (T.pack s1))  == "struct"
-                                                      then searchStructField (snd st) (T.unpack (T.take (length s1 - 7) (T.pack s1))) $ getlabel $ ignorepos e2
+                                      Right l1 -> if (head $ words $ head l1) == "struct"
+                                                      then searchStructField (snd st) (last $ words $ head l1) $ getlabel $ ignorepos e2
                                                       else Left "Operator '->' expects a struct as a left operand."
                   SynExp e1 e2 -> case checkExpr st $ ignorepos e1 of
                                     Left msg -> Left msg
@@ -461,32 +460,30 @@ checkExpr st se = case se of
                                                                         else Left "Operator '^' expects operands of type int or float."
                                                   else Left "Operator '^' expects operands of type int or float."
                   SynTimes e1 e2 -> case checkExpr st $ ignorepos e1 of
-                                    Left msg -> Left msg
-                                    Right l1 -> if l1 == ["int"] || l1 == ["float"]
-                                                  then case checkExpr st $ ignorepos e2 of
+                                      Left msg -> Left msg
+                                      Right l1 -> if l1 == ["int"] || l1 == ["float"]
+                                                    then case checkExpr st $ ignorepos e2 of
                                                           Left msg -> Left msg
                                                           Right l2 -> if l2 == ["int"] || l2 == ["float"]
                                                                         then if l1 == l2
                                                                                 then Right l1
-                                                                                else Left "If the first operand is of type int or float, operator '*' expects second operator of same type."
-                                                                        else Left "If the first operand is of type int or float, operator '*' expects second operator of type int or float."
-                                                  else if l1 == ["vec"] || l1 == ["vec2"] || l1 == ["vec3"] || l1 == ["vec4"] 
+                                                                                else Left "If the secon operand is of type int or float, operator '*' expects a first operand of same type."
+                                                                        else if (head $ words $ head l2) == "mat"
+                                                                                then if l1 == ["float"]
+                                                                                      then Right l2
+                                                                                      else Left "If the second operand is of type mat, operator '*' expects a first operand of type float or mat."
+                                                                                else Left "If the first operand is of type int or float, operator '*' expects a second operand of type int, float or mat."
+                                                    else if (head $ words $ head l1) == "mat"
                                                           then case checkExpr st $ ignorepos e2 of
-                                                                  Left msg -> Left msg
-                                                                  Right l2 -> if l2 == ["int"] || l2 == ["float"]
-                                                                                then Right l1
-                                                                                else if l2 == ["mat"] || l2 == ["mat2"] || l2 == ["mat3"] || l2 == ["mat4"]
-                                                                                        then Right ["vec"]
-                                                                                        else Left "Operands of wrong types."
-                                                          else if l1 /= ["bool"]
-                                                                  then case checkExpr st $ ignorepos e2 of
-                                                                        Left msg -> Left msg
-                                                                        Right l2 -> if l2 == ["int"] || l2 == ["float"]
-                                                                                      then Right l1
-                                                                                      else if l2 == ["vec"] || l2 == ["vec2"] || l2 == ["vec3"] || l2 == ["vec4"] 
-                                                                                              then Right ["mat"]
-                                                                                              else Left "Operands of wrong types."
-                                                                  else Left "Operator '*' expects operands of type int, float, vec or mat."
+                                                                Left msg -> Left msg
+                                                                Right l2 -> if l2 == ["float"]
+                                                                              then Right l1
+                                                                              else if (head $ words $ head l2) == "mat"
+                                                                                      then if (last $ words $ head l1) == (head $ tail $ words $ head l2)
+                                                                                            then Right $ ("mat " ++ (head $ tail $ words $ head l1) ++ " " ++ (last $ words $ head l2)) : []
+                                                                                            else Left "When multiplying matrices, number of columns of the first one must be equal to the number of lines of the second one."
+                                                                                      else Left "If the first operando is of type mat, operator '*' expects a second operand of type float or mat."
+                                                          else Left "Operator '*' expects operands of type int, float or mat."
                   SynDiv e1 e2 -> case checkExpr st $ ignorepos e1 of
                                     Left msg -> Left msg
                                     Right l1 -> if l1 == ["int"] || l1 == ["float"]
@@ -497,13 +494,13 @@ checkExpr st se = case se of
                                                                                 then Right l1
                                                                                 else Left "If the first operand is of type int or float, operator '/' expects second operator of same type."
                                                                         else Left "If the first operand is of type int or float, operator '/' expects second operator of type int or float."
-                                                  else if l1 /= ["bool"]
+                                                  else if (head $ words $ head l1) == "mat"
                                                           then case checkExpr st $ ignorepos e2 of
                                                                   Left msg -> Left msg
-                                                                  Right l2 -> if l2 == ["int"] || l2 == ["float"]
+                                                                  Right l2 -> if l2 == ["float"]
                                                                                 then Right l1 
-                                                                                else Left "If the first operand is of type vec or mat, operator '/' expects second operator of type int or float."
-                                                          else Left "Operator '/' expects operands of type int, float, vec or mat."
+                                                                                else Left "If the first operand is of type mat, operator '/' expects second operator of type float."
+                                                          else Left "Operator '/' expects operands of type int, float or mat."
                   SynMod e1 e2 -> case checkExpr st $ ignorepos e1 of
                                     Left msg -> Left msg
                                     Right l1 -> if l1 == ["int"] || l1 == ["float"]
@@ -524,8 +521,8 @@ checkExpr st se = case se of
                                                                         then if l1 == l2
                                                                                 then Right l1
                                                                                 else Left "Operator '+' expects operands of equal types."
-                                                                        else Left "Operator '+' expects operands of type int, float, vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
-                                                  else Left "Operator '+' expects operands of type int, float, vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
+                                                                        else Left "Operator '+' expects operands of type int, float or mat."
+                                                  else Left "Operator '+' expects operands of type int, float or mat."
                   SynMinus e1 e2 -> case checkExpr st $ ignorepos e1 of
                                     Left msg -> Left msg
                                     Right l1 -> if l1 /= ["bool"]
@@ -535,41 +532,43 @@ checkExpr st se = case se of
                                                                         then if l1 == l2
                                                                                 then Right l1
                                                                                 else Left "Operator '-' (binary) expects operands of equal types."
-                                                                        else Left "Operator '-' (binary) expects operands of type int, float, vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
-                                                  else Left "Operator '-' (binary) expects operands of type int, float, vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
+                                                                        else Left "Operator '-' (binary) expects operands of type int, float or mat."
+                                                  else Left "Operator '-' (binary) expects operands of type int, float or mat."
                   SynDotTimes e1 e2 -> case checkExpr st $ ignorepos e1 of
                                         Left msg -> Left msg
-                                        Right l1 -> if l1 /= ["int"] && l1 /= ["float"] && l1 /= ["bool"]
+                                        Right l1 -> if (head $ words $ head l1) == "mat"
                                                       then case checkExpr st $ ignorepos e2 of
                                                               Left msg -> Left msg
-                                                              Right l2 -> if l2 /= ["int"] && l2 /= ["float"] && l2 /= ["bool"]
+                                                              Right l2 -> if (head $ words $ head l2) == "mat"
                                                                             then if l1 == l2
                                                                                     then Right l1
                                                                                     else Left "Operator '.*.' expects operands of equal types."
-                                                                            else Left "Operator '.*.' expects operands of type vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
-                                                      else Left "Operator '.*.' expects operands of type vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
+                                                                            else Left "Operator '.*.' expects operands of type mat."
+                                                      else Left "Operator '.*.' expects operands of type mat."
                   SynDotDiv e1 e2 -> case checkExpr st $ ignorepos e1 of
                                         Left msg -> Left msg
-                                        Right l1 -> if l1 /= ["int"] && l1 /= ["float"] && l1 /= ["bool"]
+                                        Right l1 -> if (head $ words $ head l1) == "mat"
                                                       then case checkExpr st $ ignorepos e2 of
                                                               Left msg -> Left msg
-                                                              Right l2 -> if l2 /= ["int"] && l2 /= ["float"] && l2 /= ["bool"]
+                                                              Right l2 -> if (head $ words $ head l2) == "mat"
                                                                             then if l1 == l2
                                                                                     then Right l1
                                                                                     else Left "Operator './.' expects operands of equal types."
-                                                                            else Left "Operator './.' expects operands of type vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
-                                                      else Left "Operator './.' expects operands of type vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
+                                                                            else Left "Operator './.' expects operands of type mat."
+                                                      else Left "Operator './.' expects operands of type mat."
                   SynDot e1 e2 -> case checkExpr st $ ignorepos e1 of
                                         Left msg -> Left msg
-                                        Right l1 -> if l1 /= ["int"] && l1 /= ["float"] && l1 /= ["bool"]
+                                        Right l1 -> if (head $ words $ head l1) == "mat"
                                                       then case checkExpr st $ ignorepos e2 of
                                                               Left msg -> Left msg
-                                                              Right l2 -> if l2 /= ["int"] && l2 /= ["float"] && l2 /= ["bool"]
+                                                              Right l2 -> if (head $ words $ head l2) == "mat"
                                                                             then if l1 == l2
-                                                                                    then Right l1
+                                                                                    then if (head $ tail $ words $ head l1) == "1" || (last $ words $ head l1) == "1"
+                                                                                          then Right l1
+                                                                                          else Left "Operator '.' expects matrices with one line or one column."
                                                                                     else Left "Operator '.' expects operands of equal types."
-                                                                            else Left "Operator '.' expects operands of type vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
-                                                      else Left "Operator '.' expects operands of type vec, vec2, vec3, vec4, mat, mat2, mat3 or mat4."
+                                                                            else Left "Operator '.' expects operands of type mat."
+                                                      else Left "Operator '.' expects operands of type mat."
                   SynRShift e1 e2 -> case checkExpr st $ ignorepos e1 of
                                       Left msg -> Left msg
                                       Right l1 -> if l1 == ["int"]
@@ -712,33 +711,26 @@ checkExpr st se = case se of
                                                   else Left "Operator 'or' expects operands of type bool." 
                   SynIndex e1 e2 -> case checkExpr st $ ignorepos e1 of
                                     Left msg -> Left msg
-                                    Right l1 -> if l1 == ["vec"] || l1 == ["vec2"] || l1 == ["vec3"] || l1 == ["vec4"]
-                                                  then if length e2 == 1
-                                                        then case checkExpr st $ ignorepos $ head e2 of
-                                                              Left msg -> Left msg
-                                                              Right l2 -> if l2 == ["int"]
-                                                                            then Right ["float"]
-                                                                            else Left "Index has to by o type int."
-                                                        else Left "Vectors can only be accessed with one index."
-                                                  else if l1 == ["mat"] || l1 == ["mat2"] || l1 == ["mat3"] || l1 == ["mat4"]
-                                                          then if length e2 == 2
-                                                                  then case checkExpr st $ ignorepos $ head e2 of
-                                                                          Left msg -> Left msg
-                                                                          Right l2 -> if l2 == ["int"]
-                                                                                        then case checkExpr st $ ignorepos $ last e2 of
-                                                                                                Left msg -> Left msg
-                                                                                                Right l3 -> if l3 == ["int"]
-                                                                                                              then Right ["float"]
-                                                                                                              else Left "Index has to by o type int."
-                                                                                        else Left "Index has to by o type int."
-                                                                  else Left "Matrices can only be accessed with two indexes."
-                                                          else Left "You need a vector or matrix to access through indexes." 
+                                    Right l1 -> if (head $ words $ head l1) == "mat"
+                                                  then if length e2 == 2
+                                                          then case checkExpr st $ ignorepos $ head e2 of
+                                                            Left msg -> Left msg
+                                                            Right l2 -> if l2 == ["int"]
+                                                                          then case checkExpr st $ ignorepos $ last e2 of
+                                                                                  Left msg -> Left msg
+                                                                                  Right l3 -> if l3 == ["int"]
+                                                                                                then Right ["float"]
+                                                                                                else Left "Index has to by o type int."
+                                                                          else Left "Index has to by o type int."
+                                                          else Left "Matrices can only be accessed with two indexes."
+                                                  else Left "You can only access matrices through indexes." 
                   --always of type mat
                   SynMat e1 -> if length e1 > 0
                                 then if (length $ head e1) > 0
                                         then case checkMatrix st e1 (length $ head e1) of
                                                 Left msg -> Left msg
-                                                Right _ -> Right ["mat"]
+                                                Right _ -> let s = "mat " ++ (show $ length e1) ++ " " ++ (show $ length $ head e1) in
+                                                              Right $ s : []
                                         else Left "Matrix needs at least one element."
                                 else Left "Matrix needs at least one element."
 
