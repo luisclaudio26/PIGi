@@ -353,13 +353,28 @@ checkWhile st lvl sw = case exprOk of
                           blockOk = checkBlock st (lvl+1) (getWhileBlock sw)
 
 checkAttr :: SuperTable -> SynAttr -> Either String SynAttr
-checkAttr st sa@(SynAttr si se) = case buildIdentTypeList st (ignorepos `fmap` si) of
-                                    Left msg -> Left msg
-                                    Right s1 -> case buildExprTypeList st (ignorepos `fmap` se) of
-                                                  Left msg -> Left msg
-                                                  Right s2 -> if typeListsEqual s1 s2
-                                                                then Right sa
-                                                                else Left "Variable and expression have different types in attribution."
+checkAttr st sa@(SynAttr si se) = do assertMutable st (ignorepos `fmap` si)
+                                     s1 <- buildIdentTypeList st (ignorepos `fmap` si)
+                                     s2 <- buildExprTypeList st (ignorepos `fmap` se)
+                                     if typeListsEqual s1 s2 == True
+                                        then Right sa
+                                        else Left "Variable and expression have different types in attribution."
+
+assertMutable :: SuperTable -> [SynIdent] -> Either String ()
+assertMutable st [] = Right ()
+assertMutable st (h:t) = do var <- searchSTEntry (fst st) (getlabel h)
+                            if isMutable var
+                              then return ()
+                              else fail $ "Variable is not mutable: " ++ (getlabel h)
+
+{- LEGACY:
+case buildIdentTypeList st (ignorepos `fmap` si) of
+  Left msg -> Left msg
+  Right s1 -> case buildExprTypeList st (ignorepos `fmap` se) of
+                Left msg -> Left msg
+                Right s2 -> if typeListsEqual s1 s2
+                              then Right sa
+                              else Left "Variable and expression have different types in attribution." -}
                                                                 
 typeListsEqual :: [String] -> [String] -> Bool
 typeListsEqual [] [] = True
