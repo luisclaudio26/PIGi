@@ -1,5 +1,6 @@
 module StaticAnalyzer where
 
+import qualified Lexical as L
 import Syntactic
 import PosParsec(ignorepos, Located)
 import Types
@@ -16,7 +17,8 @@ import qualified Data.Text as T
 -- any other information that might be useful).
 data STEntry = Variable { getVarId :: String    -- identifier
                         , getVarType :: String  -- type
-                        , getVarLevel :: Int }  -- scope level
+                        , getVarLevel :: Int    -- scope level
+                        , isMutable :: Bool }   -- is it marked as mut/const?
              | Function { getFuncName :: String
                         , getFuncArgTypes :: [String]
                         , getFuncRetTypes :: [String] } 
@@ -97,7 +99,7 @@ stFromStruct st stct = let n = getlabel $ ignorepos $ getStructName stct in
                                                                    ([])
 
 stFromDef :: SuperTable -> Int -> SynDef -> Either String SuperTable
-stFromDef st lvl (SynDef typedId) = stFromTypedIdentList st lvl typedId
+stFromDef st lvl (SynDef typedId) = stFromTypedIdentList st True lvl typedId
 
 stFromProc :: SuperTable -> SynProc -> Either String SuperTable
 stFromProc st  (SynProc name _ formalParam block) = let n = getlabel $ ignorepos name in
@@ -128,18 +130,30 @@ buildFuncRetTypeList ret = (getlabel . ignorepos . getTypeIdent . ignorepos . ge
 buildProcTypeStr :: [SynTypedIdent] -> [String]
 buildProcTypeStr formalParam = (getlabel . ignorepos . getTypeIdent . ignorepos . getTypedIdentType) `fmap` formalParam
 
--- TODO: Code for entry is to big; maybe we could create some 
--- helper functions to make it smaller.
-stFromTypedIdentList :: SuperTable -> Int -> [SynTypedIdent] -> Either String SuperTable
-stFromTypedIdentList st lvl [] = Right st
-stFromTypedIdentList st lvl (h:t) = let name = getlabel $ ignorepos $ getTypedIdentName h in
+-- Bool parameter (defaultMut) tells stFromTypedIdentList whether we're parsing
+-- a list whose "default mode" is to consider everything mutable or constant.
+stFromTypedIdentList :: SuperTable -> Bool -> Int -> [SynTypedIdent] -> Either String SuperTable
+stFromTypedIdentList st defaultMut lvl [] = Right st
+stFromTypedIdentList st defaultMut lvl (h:t) = let name = getlabel $ ignorepos $ getTypedIdentName h in
                                         if isElemUserTypeTable name (snd st) || isElemSymbolTable name lvl (fst st)
                                             then Left "Name already being used as a type name or variable name." 
-                                            else stFromTypedIdentList (newST, snd st) lvl t
+                                            else stFromTypedIdentList (newST, snd st) defaultMut lvl t
                                                   where newST = entry : (fst st)
                                                         entry = Variable (getlabel $ ignorepos $ getTypedIdentName h) 
                                                                          (getLabelFromType $ ignorepos $ getTypedIdentType h)
                                                                           lvl
+                                                                          (interpretAnnotation annot defaultMut)
+                                                        annot = getAnnotation $ ignorepos $ getTypedIdentType h
+
+-- Reads annotation (or absense of it) and decides whether variable
+-- is mutable or constant.
+interpretAnnotation :: Maybe (Located SynAnnotation) -> Bool -> Bool
+interpretAnnotation Nothing defaultMut = defaultMut
+interpretAnnotation (Just lSA) defaultMut = case getModifier $ ignorepos lSA of
+                                              Nothing -> defaultMut
+                                              Just token -> case getlex $ ignorepos token of
+                                                              L.LexModMut -> True
+                                                              L.LexModConst -> False
 
 isElemUserTypeTable :: String -> [UTEntry] -> Bool
 isElemUserTypeTable s [] = False
@@ -154,9 +168,9 @@ isElemUserTypeTable s (h:t) = case h of
 isElemSymbolTable :: String  -> Int -> [STEntry] -> Bool
 isElemSymbolTable s lvl [] = False
 isElemSymbolTable s lvl (h:t) = case h of 
-                                  Variable name _ varlvl -> if name == s && lvl == varlvl
-                                                            then True
-                                                            else isElemSymbolTable s lvl t 
+                                  Variable name _ varlvl _ -> if name == s && lvl == varlvl
+                                                                then True
+                                                                else isElemSymbolTable s lvl t 
                                   Function name _ _ -> if name == s
                                                         then True
                                                         else isElemSymbolTable s lvl t
@@ -228,8 +242,8 @@ checkModStmt st stmt = case stmt of
 
 -- Again: no nested subroutines, so scope level is always 1.
 checkFunc :: SuperTable -> Located SynFunc -> Either String SynFunc
-checkFunc st func = do stWithArgs <- stFromTypedIdentList st lvl funcArgs
-                       stWithRet <- stFromTypedIdentList stWithArgs lvl funcRet
+checkFunc st func = do stWithArgs <- stFromTypedIdentList st False lvl funcArgs
+                       stWithRet <- stFromTypedIdentList stWithArgs False lvl funcRet
                        checkBlock stWithRet lvl funcBlock
                        return $ ignorepos func
                     where
@@ -244,7 +258,7 @@ checkProc st proc = case checkBlock newSt lvl $ getProcBlock unlocProc of
                       Left msg -> Left msg
                     where lvl = 1
                           unlocProc = ignorepos proc
-                          newSt = case stFromTypedIdentList st lvl (getProcArgs $ ignorepos proc) of
+                          newSt = case stFromTypedIdentList st False lvl (getProcArgs $ ignorepos proc) of
                                     Right newSt' -> newSt'
                                     Left msg -> st -- PENDING: We should do something to throw message in case
                                                    -- of error here!
@@ -347,7 +361,7 @@ checkAttr st sa@(SynAttr si se) = case buildIdentTypeList st (ignorepos `fmap` s
                                                   Right s2 -> if typeListsEqual s1 s2
                                                                 then Right sa
                                                                 else Left "Variable and expression have different types in attribution."
-
+                                                                
 typeListsEqual :: [String] -> [String] -> Bool
 typeListsEqual [] [] = True
 typeListsEqual (h1:t1) (h2:t2) = if h1 /= h2 && h1 /= "_"
@@ -383,17 +397,17 @@ identType (syt, utt) si@(SynIdent s) = if s == "_"
 searchSymbolTable :: [STEntry] -> String -> Either String String
 searchSymbolTable [] s = Left "Variable not defined."
 searchSymbolTable (h:t) s = case h of 
-                                Variable name vtype _ -> if name == s
-                                                          then Right vtype
-                                                          else searchSymbolTable t s
+                                Variable name vtype _ _ -> if name == s
+                                                            then Right vtype
+                                                            else searchSymbolTable t s
                                 _ -> searchSymbolTable t s
 
 searchSTEntry :: [STEntry] -> String -> Either String STEntry
 searchSTEntry [] s = Left $ "Symbol \"" ++ s ++ "\" was not defined."
 searchSTEntry (h:t) s = case h of
-                          Variable name _ _ -> if name == s
-                                                then Right h
-                                                else searchSTEntry t s
+                          Variable name _ _ _ -> if name == s
+                                                  then Right h
+                                                  else searchSTEntry t s
                           Function name _ _ -> if name == s
                                                 then Right h
                                                 else searchSTEntry t s
@@ -406,7 +420,7 @@ searchSTEntry (h:t) s = case h of
 procInST :: [STEntry] -> String -> [String] -> Bool
 procInST [] pName pArgs = False
 procInST (h:t) pName pArgs = case h of
-                              Variable _ _ _ -> searchTheRest
+                              Variable _ _ _ _ -> searchTheRest
                               Function _ _ _ -> searchTheRest
                               Procedure name args -> if name == pName && args == pArgs
                                                         then True
@@ -788,9 +802,9 @@ findFuncRetTypes (h:t) s = case h of
                             Procedure name _ -> if name == s
                                                     then Left "Can't call a procedure in an attribution (no return value)."
                                                     else findFuncRetTypes t s
-                            Variable name _ _ -> if name == s
-                                                    then Left "Function not defined." 
-                                                    else findFuncRetTypes t s
+                            Variable name _ _ _ -> if name == s
+                                                       then Left "Function not defined." 
+                                                       else findFuncRetTypes t s
 
 
 
