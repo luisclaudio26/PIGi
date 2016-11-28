@@ -88,11 +88,9 @@ instance AnnotatedTyped SynType where
                              then []
                              else [Ref]
 
-
 -- | SynParser of type
 syntype :: SynParser SynType
 syntype = try syntypegen <|> syntypengen
-
 
 -- | SynParser of a non generic type
 syntypengen:: SynParser SynType
@@ -266,18 +264,46 @@ syndef = locate $
      return $ SynDef vartyped
 -- = Attribution
 
+data SynLValue = SynLIdent (Located SynIdent)
+               | SynLArrow { getPath :: (Located SynIdent) ----getPath :: (Located SynLValue)
+                           , getField :: (Located SynIdent)} deriving (Show)
+
+synlvalue :: SynParser SynLValue
+synlvalue = synlident <|> synlarrow
+
+synlident :: SynParser SynLValue
+synlident = locate $
+  do field <- synident
+     return $ SynLIdent field
+
+
+synlarrow :: SynParser SynLValue
+synlarrow = locate $
+  do --path <- synlvalue
+     path <- synident
+     arrow <- synlex LexArrow
+     field <- synident
+     return $ SynLArrow path field
+
+data SynLValueList = SynLValueList { getlvaluelist :: [Located SynLValue] } deriving (Show)
+
+synlvaluelist :: SynSpecParser SynLValueList
+synlvaluelist = fmap SynLValueList (synlvalue `sepBy` (synlex LexComma))
+
 -- == Simple attribution 
 
 -- | Syntactic construct for attribution 
-data SynAttr = SynAttr { getAttrVars :: [Located SynIdent]
+data SynAttr = SynAttr { getAttrVars :: [Located SynLValue]
                        , getAttrExprs :: [Located SynExpr]
-                       } deriving (Show)
+                       } 
+             | SynOpAttr { getAttrVar :: (Located SynLValue)
+                          ,getAttrExpr :: (Located SynExpr) 
+                         } deriving (Show)
 
 -- | SynParser for attribution
--- TODO: accept to struct. Example: `p = (4.0, 2.0, 1.0);`
 synattr :: SynParser SynAttr
-synattr = locate $
-  do var <- fmap getidentlist synidentlist
+synattr = locate $   
+  do var <- fmap getlvaluelist synlvaluelist 
      stok <- synlex LexAttr
      value <- fmap getexprlist synexprlist
      synlex LexSemicolon
@@ -286,12 +312,13 @@ synattr = locate $
      -- | SynParser for attribution
 synopattr :: SynParser SynAttr
 synopattr = locate $
-  do var <- synident
+  do var <- synlvalue
      stok <- synlex LexPlusAttr <|> synlex LexMinusAttr <|> synlex LexTimesAttr <|> synlex LexDivAttr
      expr <- synexpr
      synlex LexSemicolon
      return $ SynAttr [var] $
-       let varexpr =  mklocated (getpos var) (SynIdentExpr var)
+       let v = getField (ignorepos var)
+           varexpr =  mklocated (getpos v) (SynIdentExpr v)
            stokPos = mklocated (getpos stok)
         in case ignorepos stok of 
              (SynToken LexPlusAttr)  ->

@@ -362,10 +362,11 @@ checkAttr st sa@(SynAttr si se) = do assertMutable st (ignorepos `fmap` si)
 
 assertMutable :: SuperTable -> [SynIdent] -> Either String ()
 assertMutable st [] = Right ()
-assertMutable st (h:t) = do var <- searchSTEntry (fst st) (getlabel h)
+assertMutable st (h:t) = let lb = (getlabel h) in --(getlabel (ignorepos (getField h))) in
+                         do var <- searchSTEntry (fst st) lb
                             if isMutable var
                               then return ()
-                              else fail $ "Variable is not mutable: " ++ (getlabel h)
+                              else fail $ "Variable is not mutable: " ++ lb
 
 {- LEGACY:
 case buildIdentTypeList st (ignorepos `fmap` si) of
@@ -382,14 +383,18 @@ typeListsEqual (h1:t1) (h2:t2) = if h1 /= h2 && h1 /= "_"
                                     then False
                                     else typeListsEqual t1 t2
            
-buildIdentTypeList :: SuperTable -> [SynIdent] -> Either String [String]
+buildIdentTypeList :: SuperTable -> [SynLValue] -> Either String [String]
 buildIdentTypeList st [] = Right []
-buildIdentTypeList st (h:t) = case identType st h of
-                                Left msg -> Left msg
-                                Right s -> case buildIdentTypeList st t of
-                                            Left msg -> Left msg
-                                            Right l -> Right $ s : l
-
+buildIdentTypeList st (h:t) = case h of
+                                SynLIdent si -> case identType st $ ignorepos si of
+                                                    Left msg -> Left msg
+                                                    Right s -> case buildIdentTypeList st t of
+                                                                Left msg -> Left msg
+                                                                Right l -> Right $ s : l
+                                SynLArrow mama field -> case ignorepos mama of
+                                                          SynLIdent si2 -> searchStructField (snd st) (getlabel $ ignorepos si2) (getlabel $ ignorepos field)
+                                                          SynLArrow _ _ -> Left "not yet implemented" 
+ 
 buildExprTypeList :: SuperTable -> [SynExpr] -> Either String [String]
 buildExprTypeList st [] = Right []
 buildExprTypeList st (h:t) = case checkExpr st h of
@@ -812,7 +817,6 @@ findFuncRetTypes (h:t) s = case h of
                             Variable name _ _ _ -> if name == s
                                                        then Left "Function not defined." 
                                                        else findFuncRetTypes t s
-
 
 
 

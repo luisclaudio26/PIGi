@@ -193,13 +193,13 @@ runDef locdef =
                registerLocalUndefVar name tp
     in mapM_ regvar tpIdents
 
-
 -- | Attribution execution
 -- Includes the list = function() case
 runAttr :: (Located SynAttr) -> Exec ()
 runAttr locattr =
     do let attr = ignorepos locattr
-           locidents = getAttrVars attr 
+           aux = fmap getField (fmap ignorepos (getAttrVars attr))
+           locidents = fmap ignorepos aux
            locexprs = getAttrExprs attr
        if (length locidents > 0) && (length locexprs == 1)
        then
@@ -207,7 +207,7 @@ runAttr locattr =
          in case expr0 of
               (SynCallExpr loccall) ->
                   do vals <- callFunc loccall
-                     let names = map (getlabel . ignorepos) locidents
+                     let names = map getlabel locidents
                      sequence_ $ zipWith modifyVarValue names vals
               _ -> distRunAttr locattr
        else distRunAttr locattr
@@ -218,10 +218,11 @@ runAttr locattr =
 distRunAttr :: (Located SynAttr) -> Exec ()
 distRunAttr locattr =
     do let attr = ignorepos locattr
-           locidents = getAttrVars attr 
+           aux = fmap getField (fmap ignorepos (getAttrVars attr))
+           locidents = fmap ignorepos aux
            locexprs = getAttrExprs attr
        vals <- mapM evalExpr locexprs
-       let names = map (getlabel . ignorepos) locidents
+       let names = map getlabel locidents
        zipWithM_ modifyVarValue names vals
 
 
