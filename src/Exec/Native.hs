@@ -99,6 +99,8 @@ strCast [FloatVal f] = return [StrVal $ show f]
 strCast [BoolVal b] = return [StrVal $ if b then "true" else "false"]
 strCast [MatVal _ _ mat] = return [StrVal $ show mat]
 
+intToBool :: [Val] -> Exec [Val]
+intToBool [IntVal i] = return [BoolVal (i /= 0)]
 
 nativeFuncs :: [Func]
 nativeFuncs =
