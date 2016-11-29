@@ -39,7 +39,9 @@ symbolTable = [Procedure "print" ["int"]
               ,Procedure "println" ["string"]
               ,Function "floor" ["float"] ["int"]
               ,Function "toFloat" ["int"] ["float"]
-              ,Function "toBool" ["int"] ["bool"] ]
+              ,Function "toBool" ["int"] ["bool"]
+              ,Function "toString" ["int"] ["string"]
+              ,Function "readInt" [] ["int"] ]
 
 data Field = Field { getFieldName :: String
                    , getFieldType :: String } deriving (Show)
