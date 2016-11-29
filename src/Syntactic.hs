@@ -3,9 +3,11 @@ module Syntactic where
 import Control.Monad.Identity
 import Data.List
 import Data.Maybe
+import Data.Foldable
 import Text.Parsec (eof, sepBy)
 import Text.Parsec.Prim
 import Text.Parsec.Expr
+import Text.Parsec.Combinator (sepBy1)
 import Types
 import PosParsec
 import Lexical
@@ -264,26 +266,22 @@ syndef = locate $
      return $ SynDef vartyped
 -- = Attribution
 
-data SynLValue = SynLIdent (Located SynIdent)
-               | SynLArrow { getPath :: (Located SynIdent) ----getPath :: (Located SynLValue)
-                           , getField :: (Located SynIdent)} deriving (Show)
+data SynLValue = SynLIdent { getField :: Located SynIdent }
+               | SynLArrow { getPath :: Located SynLValue
+                           , getField :: Located SynIdent
+                           }
+               deriving (Show)
 
 synlvalue :: SynParser SynLValue
-synlvalue = synlident <|> synlarrow
+synlvalue =
+    do ids <- synident `sepBy1` synlex LexArrow
+       let 
+           h = head ids
+           start = mklocated (getpos h) (SynLIdent h)
+           access = tail ids
+           bind acc ident = mklocated (getpos acc) (SynLArrow acc ident)
+       return $ foldl bind start access
 
-synlident :: SynParser SynLValue
-synlident = locate $
-  do field <- synident
-     return $ SynLIdent field
-
-
-synlarrow :: SynParser SynLValue
-synlarrow = locate $
-  do --path <- synlvalue
-     path <- synident
-     arrow <- synlex LexArrow
-     field <- synident
-     return $ SynLArrow path field
 
 data SynLValueList = SynLValueList { getlvaluelist :: [Located SynLValue] } deriving (Show)
 
