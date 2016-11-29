@@ -104,16 +104,17 @@ nativeFuncs :: [Func]
 nativeFuncs =
     [NativeFunc "rows" (FuncType [IntType] [annMat]) rows
     ,NativeFunc "cols" (FuncType [IntType] [annMat]) cols
-    ,NativeFunc "readint" (FuncType [] [annInt]) readInt
-    ,NativeFunc "readfloat" (FuncType [] [annFloat]) readFloat
+    ,NativeFunc "readInt" (FuncType [] [annInt]) readInt
+    ,NativeFunc "readFloat" (FuncType [] [annFloat]) readFloat
     ,NativeFunc "round" (FuncType [IntType] [annFloat]) roundFloat
     ,NativeFunc "floor" (FuncType [IntType] [annFloat]) floorFloat
     ,NativeFunc "ceil" (FuncType [IntType] [annFloat]) ceilFloat
-    ,NativeFunc "float" (FuncType [FloatType] [annInt]) floatCast
-    ,NativeFunc "string" (FuncType [StrType] [annInt]) strCast
-    ,NativeFunc "string" (FuncType [StrType] [annFloat]) strCast
-    ,NativeFunc "string" (FuncType [StrType] [annBool]) strCast
-    ,NativeFunc "string" (FuncType [StrType] [annMat]) strCast
+    ,NativeFunc "toFloat" (FuncType [FloatType] [annInt]) floatCast
+    ,NativeFunc "toString" (FuncType [StrType] [annInt]) strCast
+    ,NativeFunc "toString" (FuncType [StrType] [annFloat]) strCast
+    ,NativeFunc "toString" (FuncType [StrType] [annBool]) strCast
+    ,NativeFunc "toString" (FuncType [StrType] [annMat]) strCast
+    ,NativeFunc "toBool" (FuncType [BoolType] [annInt]) intToBool
     ]
 
 

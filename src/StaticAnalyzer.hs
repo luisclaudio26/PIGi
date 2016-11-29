@@ -36,7 +36,10 @@ symbolTable = [Procedure "print" ["int"]
               ,Procedure "println" ["float"]
               ,Procedure "println" ["mat"]
               ,Procedure "println" ["bool"]
-              ,Procedure "println" ["string"] ]
+              ,Procedure "println" ["string"]
+              ,Function "floor" ["float"] ["int"]
+              ,Function "toFloat" ["int"] ["float"]
+              ,Function "toBool" ["int"] ["bool"] ]
 
 data Field = Field { getFieldName :: String
                    , getFieldType :: String } deriving (Show)
@@ -242,7 +245,7 @@ checkModStmt st stmt = case stmt of
 -- Again: no nested subroutines, so scope level is always 1.
 checkFunc :: SuperTable -> Located SynFunc -> Either String SynFunc
 checkFunc st func = do stWithArgs <- stFromTypedIdentList st False lvl funcArgs
-                       stWithRet <- stFromTypedIdentList stWithArgs False lvl funcRet
+                       stWithRet <- stFromTypedIdentList stWithArgs True lvl funcRet
                        checkBlock stWithRet lvl funcBlock
                        return $ ignorepos func
                     where
@@ -801,9 +804,9 @@ checkMatrixLines st (h:t) = case checkExpr st $ ignorepos h of
 
 
 findFuncRetTypes :: [STEntry] -> String -> Either String [String]
-findFuncRetTypes [] s = Left "Function not defined."
+findFuncRetTypes [] s = Left $ "Function not defined: " ++ s
 findFuncRetTypes (h:t) s = case h of
-                            Function name list _ -> if name == s
+                            Function name _ list -> if name == s
                                                         then Right list
                                                         else findFuncRetTypes t s
                             Procedure name _ -> if name == s
