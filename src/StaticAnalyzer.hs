@@ -37,11 +37,20 @@ symbolTable = [Procedure "print" ["int"]
               ,Procedure "println" ["mat"]
               ,Procedure "println" ["bool"]
               ,Procedure "println" ["string"]
+
               ,Function "floor" ["float"] ["int"]
               ,Function "toFloat" ["int"] ["float"]
               ,Function "toBool" ["int"] ["bool"]
               ,Function "toString" ["int"] ["string"]
-              ,Function "readInt" [] ["int"] ]
+              ,Function "readInt" [] ["int"]
+
+              ,Function "vec2" (floatList 2) ["vec3"]
+              ,Function "vec3" (floatList 3) ["vec3"]
+              ,Function "vec4" (floatList 4) ["vec4"]
+              ,Function "mat2" (floatList 4) ["mat2"]
+              ,Function "mat3" (floatList 9) ["mat3"]
+              ,Function "mat4" (floatList 16) ["mat4"] ]
+                where floatList n = ["float" | _ <- [1..n]]
 
 data Field = Field { getFieldName :: String
                    , getFieldType :: String } deriving (Show)
