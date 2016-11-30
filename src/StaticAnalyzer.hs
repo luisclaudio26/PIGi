@@ -37,13 +37,22 @@ symbolTable = [Procedure "print" ["int"]
               ,Procedure "println" ["mat"]
               ,Procedure "println" ["bool"]
               ,Procedure "println" ["string"]
+
               ,Function "floor" ["float"] ["int"]
               ,Function "ceil" ["float"] ["int"]
               ,Function "round" ["float"] ["int"]
               ,Function "toFloat" ["int"] ["float"]
               ,Function "toBool" ["int"] ["bool"]
               ,Function "toString" ["int"] ["string"]
-              ,Function "readInt" [] ["int"] ]
+              ,Function "readInt" [] ["int"]
+
+              ,Function "vec2" (floatList 2) ["vec2"]
+              ,Function "vec3" (floatList 3) ["vec3"]
+              ,Function "vec4" (floatList 4) ["vec4"]
+              ,Function "mat2" (floatList 4) ["mat2"]
+              ,Function "mat3" (floatList 9) ["mat3"]
+              ,Function "mat4" (floatList 16) ["mat4"] ]
+                where floatList n = ["float" | _ <- [1..n]]
 
 data Field = Field { getFieldName :: String
                    , getFieldType :: String } deriving (Show)
@@ -82,7 +91,6 @@ stFromModStmts st (h:t) = let result = stFromModStmt st h in
                                 Left errorMsg  -> Left errorMsg
                                 Right newSt -> stFromModStmts newSt t
 
-
 -- Statements inside a module are global and thus have
 -- scope level zero.
 stFromModStmt :: SuperTable -> SynModStmt -> Either String SuperTable
@@ -90,19 +98,29 @@ stFromModStmt st s = case s of
                             (SynModStruct stct) -> stFromStruct st (ignorepos stct)
                             (SynModDef def) -> stFromDef st 0 (ignorepos def)  
                             (SynModProc proc) -> stFromProc st (ignorepos proc)
-                            (SynModFunc func) -> stFromFunc st (ignorepos func)
+                            (SynModFunc func) -> stFromFunc st (ignorepos func) 
 
 -- Remember we don't have nested functions/procedures, so they'll always
 -- lie at scope level zero. Also, structs can't be defined inside subroutines,
 -- so it also must lie at scope level zero.
 stFromStruct :: SuperTable -> SynStruct -> Either String SuperTable 
-stFromStruct st stct = let n = getlabel $ ignorepos $ getStructName stct in
-                                if isElemUserTypeTable n (snd st) || isElemSymbolTable n 0 (fst st)
-                                  then Left "Name already being used as a type name or variable name."
-                                  else Right (fst st, newTypeTable)
-                                      where newTypeTable = newEntry : (snd st)
-                                            newEntry = StructEntry (getlabel $ ignorepos $ getStructName stct)
-                                                                   ([])
+stFromStruct st stct = if isElemUserTypeTable structName (snd st) || isElemSymbolTable structName 0 (fst st)
+                        then Left $ "Name already being used as a type name or variable name:" ++ structName
+                        else Right (newSymbolTable, newTypeTable)
+                       where
+                        structName = getlabel $ ignorepos $ getStructName stct
+                        newTypeTable = newTTEntry : (snd st)
+                        newTTEntry = StructEntry (getlabel $ ignorepos $ getStructName stct) ([])
+                        newSymbolTable = (makeStructConstructor stct) : (fst st)
+
+makeStructConstructor :: SynStruct -> STEntry
+makeStructConstructor stct = Function name args (name:[])
+                              where
+                                name = getlabel . ignorepos . getStructName $ stct
+                                args = (getlabel . ignorepos 
+                                                 . getTypeIdent 
+                                                 . ignorepos 
+                                                 . getTypedIdentType) `fmap` getTuple stct
 
 stFromDef :: SuperTable -> Int -> SynDef -> Either String SuperTable
 stFromDef st lvl (SynDef typedId) = stFromTypedIdentList st True lvl typedId
@@ -480,9 +498,10 @@ checkExpr st se = case se of
                   SynLitFloatExpr _ -> Right ["float"]
                   SynLitBoolExpr _ -> Right ["bool"]
                   SynLitStrExpr _ -> Right ["string"]
-                  SynCallExpr e -> case findFuncRetTypes (fst st) $ getlabel $ ignorepos $ getFuncId $ ignorepos e of
-                                      Left msg -> Left msg
-                                      Right ftype -> Right ftype
+                  
+                  SynCallExpr e -> do checkFuncParam st (ignorepos e)
+                                      findFuncRetTypes (fst st) $ getlabel $ ignorepos $ getFuncId $ ignorepos e
+  
                   SynPar e -> checkExpr st $ ignorepos e
                   SynNeg e -> case checkExpr st $ ignorepos e of
                                 Left msg -> Left msg
@@ -820,6 +839,24 @@ findFuncRetTypes (h:t) s = case h of
                                                        then Left "Function not defined." 
                                                        else findFuncRetTypes t s
 
+checkFuncParam :: SuperTable -> SynCall -> Either String ()
+checkFuncParam st call = do stEntry <- searchSTEntry (fst st) funcName
+                            actualParam <- buildExprTypeList st (ignorepos `fmap` (getexprlist $ getArgList call))
+                            case stEntry of
+                              Function name _ _-> if funcInST (fst st) name actualParam == True
+                                                    then return ()
+                                                    else fail $ "No such function: " 
+                                                                ++ name ++ "(" ++ (show actualParam) ++ ")"
+                              _ -> fail $ "Not a function: " ++ (show call)
+                         where
+                          funcName = (getlabel $ ignorepos $ getFuncId call)
 
-
-
+-- BAD! We're duplicating procInST code
+funcInST :: [STEntry] -> String -> [String] -> Bool
+funcInST [] _ _ = False
+funcInST (h:t) name actualP = case h of
+                                Function fname formalP _ -> if name == fname && actualP == formalP
+                                                              then True
+                                                              else searchTheRest
+                                _ -> searchTheRest
+                              where searchTheRest = funcInST t name actualP
