@@ -1,5 +1,8 @@
 module Types where
 
+import Data.Maybe
+import Data.List
+
 type Name = String
 
 class Named a where
@@ -48,6 +51,11 @@ strToType "float" = FloatType
 strToType "string" = StrType
 strToType "mat" = MatType
 strToType name = NamedType name
+
+-- == Struct type
+getFieldIndex :: Type -> Name -> Int
+getFieldIndex (StructType _ fields) field =
+    fromJust $ elemIndex field $ map fst fields
 
 
 -- = Type annotations

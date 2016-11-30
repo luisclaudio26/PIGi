@@ -1,7 +1,8 @@
 module Exec.Prim where
 
 import Control.Monad
-import Data.List (find)
+import Data.List (find, elemIndex)
+import Data.Maybe (fromJust)
 import Syntactic
 import PosParsec
 import Types
@@ -49,6 +50,20 @@ instance Typed Val where
 
 type MemLoc = Int
 type RefCount = Int
+data Access = Field Name | Index [Int] deriving (Show)
+data AccessPath = AccessPath { memloc ::  MemLoc
+                             , access :: [Access]
+                             } deriving (Show)
+
+-- | Access path to memory location
+pureLoc :: MemLoc -> AccessPath
+pureLoc loc = AccessPath loc []
+
+
+-- | Append access instructions to access path
+appendAccess :: AccessPath -> [Access] -> AccessPath
+appendAccess (AccessPath loc acc) acc' = AccessPath loc $ acc ++ acc'
+
 
 -- | Data Object
 data Obj = Obj { getObjAddr :: MemLoc
@@ -63,7 +78,7 @@ setObjValue (Obj addr rc val) val' = Obj addr rc val'
 -- | Variable
 data Var = Var { getVarName :: String 
                , getVarType :: Type
-               , getVarAddr :: MemLoc
+               , getVarAddr :: AccessPath
                , getVarScope :: Scope
                } deriving (Show)
 
@@ -369,7 +384,8 @@ findVar varname =
 registerLocalVar :: String -> Type -> Val -> Exec ()
 registerLocalVar vname vtype vvalue =
     do vt <- obtainVarTable
-       addr <- addObj vvalue
+       loc <- addObj vvalue
+       let addr = pureLoc loc
        modifyVarTable $ Var vname vtype addr (Local 0) : vt 
 
 
@@ -380,10 +396,40 @@ registerLocalUndefVar vname vtype =
 
 
 -- | Define local reference
-registerLocalRef :: String -> Type -> MemLoc -> Exec ()
+registerLocalRef :: String -> Type -> AccessPath -> Exec ()
 registerLocalRef vname vtype vaddr =
     do vt <- obtainVarTable
        modifyVarTable $ Var vname vtype vaddr (Local 0) : vt
+
+ 
+-- | Get struct field value
+getStructField :: Val -> Name -> Val
+getStructField (StructVal tp vals) fieldname = vals !! idx
+    where idx = getFieldIndex tp fieldname
+
+
+-- | Set struct field value
+setStructField :: Val -> Name -> Val -> Val
+setStructField (StructVal tp vals) fieldname val' = StructVal tp vals'
+    where idx = getFieldIndex tp fieldname
+          bef = take idx vals
+          aft = drop (idx+1) vals
+          vals' = bef ++ [val'] ++ aft
+
+
+-- | Get value by access path (incomplete)
+getValAccess :: Val -> [Access] -> Val
+getValAccess val [] = val
+getValAccess structval (Field s:as) =
+    getValAccess (getStructField structval s) as
+
+
+-- | Set value by access path
+setValAccess :: Val -> [Access] -> Val -> Val
+setValAccess val [] val' = val'
+setValAccess st (Field field:as) val' =
+    setStructField st field (setValAccess fval as val')
+    where fval = getStructField st  field
 
 
 -- | Obtain variable value
@@ -391,8 +437,11 @@ obtainVarValue :: String -> Exec Val
 obtainVarValue vname =
     do var <- findVar vname
        let addr = getVarAddr var
-       obj <- findObj addr
-       return $ getObjValue obj
+           loc = memloc addr
+           path = access addr
+       obj <- findObj loc
+       let val = getObjValue obj
+       return $ getValAccess val path
 
 
 -- | Modify variable value
@@ -401,6 +450,21 @@ modifyVarValue vname val =
     do var <- findVar vname
        let addr = getVarAddr var
        setValAt val addr
+
+
+-- | Obtain LValue value
+obtainLValue :: Name -> [Access] -> Exec Val
+obtainLValue vname path =
+    do val <- obtainVarValue vname
+       return $ getValAccess val path
+
+
+-- | Modify LValue value
+modifyLValue :: Name -> [Access] -> Val -> Exec ()
+modifyLValue vname path fval =
+    do val <- obtainVarValue vname
+       let val' = setValAccess val path fval
+       modifyVarValue vname val'
 
 
 -- | Increment scope level for local variables
@@ -436,19 +500,6 @@ saveAndClearScope =
        return vt
 
 
--- | Change variable value by name
-{-changeVar :: String -> Val -> Exec ()
-changeVar vname val =
-    do vt <- obtainVarTable
-       let vt' = updateWhen ((==vname) . getVarName) vt val
-       modifyVarTable vt'
-    where 
-        updateWhen _ [] _ = []
-        updateWhen cond (v:vs) value
-          | cond v = setVarValue v value : vs
-          | otherwise = v : updateWhen cond vs value
--}
-
 -- == Memory table auxiliary functions
 
 findObj :: MemLoc -> Exec Obj
@@ -460,11 +511,11 @@ findObj addr =
          Nothing -> error $ "object at " ++ show addr ++ " not found"
 
 
-setValAt :: Val -> MemLoc -> Exec ()
+setValAt :: Val -> AccessPath -> Exec ()
 setValAt val addr =
     do mem <- obtainMemTable
        let changeObj obj =
-               if getObjAddr obj == addr
+               if getObjAddr obj == memloc addr
                   then setObjValue obj val
                   else obj
            newObjs = map changeObj (getMemObjs mem)

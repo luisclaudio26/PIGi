@@ -193,22 +193,36 @@ runDef locdef =
                registerLocalUndefVar name tp
     in mapM_ regvar tpIdents
 
+
+-- | LValue access path
+lvalueAccess :: SynLValue -> [Access]
+lvalueAccess (SynLIdent locident) = []
+lvalueAccess (SynLArrow loclv locident) =
+    lvalueAccess (ignorepos loclv) ++ [Field $ getName locident]
+
+
+-- | LValue variable name
+lvalueName :: SynLValue -> Name
+lvalueName (SynLIdent locident) = getName locident
+lvalueName (SynLArrow loclv _) = lvalueName $ ignorepos loclv
+
+
 -- | Attribution execution
 -- Includes the list = function() case
 runAttr :: (Located SynAttr) -> Exec ()
 runAttr locattr =
     do let attr = ignorepos locattr
-           aux = fmap getField (fmap ignorepos (getAttrVars attr))
-           locidents = fmap ignorepos aux
+           lvs = fmap ignorepos (getAttrVars attr)
            locexprs = getAttrExprs attr
-       if (length locidents > 0) && (length locexprs == 1)
+       if (length lvs > 0) && (length locexprs == 1)
        then
         let expr0 = ignorepos $ head locexprs
          in case expr0 of
               (SynCallExpr loccall) ->
                   do vals <- callFunc loccall
-                     let names = map getlabel locidents
-                     sequence_ $ zipWith modifyVarValue names vals
+                     let vnames = map lvalueName lvs
+                         vaccss = map lvalueAccess lvs
+                     sequence_ $ zipWith3 modifyLValue vnames vaccss vals
               _ -> distRunAttr locattr
        else distRunAttr locattr
 
@@ -218,12 +232,12 @@ runAttr locattr =
 distRunAttr :: (Located SynAttr) -> Exec ()
 distRunAttr locattr =
     do let attr = ignorepos locattr
-           aux = fmap getField (fmap ignorepos (getAttrVars attr))
-           locidents = fmap ignorepos aux
+           lvs = fmap ignorepos (getAttrVars attr)
            locexprs = getAttrExprs attr
        vals <- mapM evalExpr locexprs
-       let names = map getlabel locidents
-       zipWithM_ modifyVarValue names vals
+       let names = map lvalueName lvs
+           accss = map lvalueAccess lvs
+       sequence_ $ zipWith3 modifyLValue names accss vals
 
 
 -- | Statement execution
@@ -248,16 +262,16 @@ runBlock locblock =
 -- = Subprograms
 
 -- | Add procedure/function arguments to variable table
-registerArgs :: [SynTypedIdent] -> [(Val, Maybe MemLoc)] -> Exec ()
+registerArgs :: [SynTypedIdent] -> [(Val, Maybe AccessPath)] -> Exec ()
 registerArgs formalArgs vals =
     zipWithM_ regVar formalArgs vals
     where
-        regVar :: SynTypedIdent -> (Val, Maybe MemLoc) -> Exec ()
-        regVar tid (val, mloc) =
+        regVar :: SynTypedIdent -> (Val, Maybe AccessPath) -> Exec ()
+        regVar tid (val, maccss) =
             do let vname = getName tid
                    ref = isRef $ toAnnType tid
                if ref
-               then case mloc of
+               then case maccss of
                  Just loc -> registerLocalRef vname (toType val) loc
                  Nothing -> error "invalid reference expression" 
                else registerLocalVar vname (toType val) val
@@ -276,7 +290,7 @@ registerRets rets =
 
 -- | Get address for expression, if lvalue
 -- TODO: Add struct acess
-extrAddr :: LocSynExpr -> Exec (Maybe MemLoc)
+extrAddr :: LocSynExpr -> Exec (Maybe AccessPath)
 extrAddr locexpr =
     case expr of
       (SynIdentExpr locident) ->
