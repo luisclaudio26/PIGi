@@ -195,16 +195,24 @@ runDef locdef =
 
 
 -- | LValue access path
-lvalueAccess :: SynLValue -> [Access]
-lvalueAccess (SynLIdent locident) = []
+lvalueAccess :: SynLValue -> Exec [Access]
+lvalueAccess (SynLIdent locident) = return []
 lvalueAccess (SynLArrow loclv locident) =
-    lvalueAccess (ignorepos loclv) ++ [Field $ getName locident]
+    do acc <- lvalueAccess (ignorepos loclv)
+       return $ acc ++ [Field $ getName locident]
+lvalueAccess (SynLIndex loclv locexprs) =
+    do acc <- lvalueAccess (ignorepos loclv)
+       vals <- mapM evalExpr locexprs
+       let toInt (IntVal i) = i
+           idxs = map toInt vals
+       return $ acc ++ [Index idxs]
 
 
 -- | LValue variable name
 lvalueName :: SynLValue -> Name
 lvalueName (SynLIdent locident) = getName locident
 lvalueName (SynLArrow loclv _) = lvalueName $ ignorepos loclv
+lvalueName (SynLIndex loclv _) = lvalueName $ ignorepos loclv
 
 
 -- | Attribution execution
@@ -221,7 +229,7 @@ runAttr locattr =
               (SynCallExpr loccall) ->
                   do vals <- callFunc loccall
                      let vnames = map lvalueName lvs
-                         vaccss = map lvalueAccess lvs
+                     vaccss <- mapM lvalueAccess lvs
                      sequence_ $ zipWith3 modifyLValue vnames vaccss vals
               _ -> distRunAttr locattr
        else distRunAttr locattr
@@ -236,7 +244,7 @@ distRunAttr locattr =
            locexprs = getAttrExprs attr
        vals <- mapM evalExpr locexprs
        let names = map lvalueName lvs
-           accss = map lvalueAccess lvs
+       accss <- mapM lvalueAccess lvs
        sequence_ $ zipWith3 modifyLValue names accss vals
 
 

@@ -270,18 +270,30 @@ data SynLValue = SynLIdent { getField :: Located SynIdent }
                | SynLArrow { getPath :: Located SynLValue
                            , getField :: Located SynIdent
                            }
+               | SynLIndex { getPath :: Located SynLValue
+                           , getIndex :: [Located SynExpr] }
                deriving (Show)
 
 synlvalue :: SynParser SynLValue
 synlvalue =
-    do ids <- synident `sepBy1` synlex LexArrow
-       let 
-           h = head ids
-           start = mklocated (getpos h) (SynLIdent h)
-           access = tail ids
-           bind acc ident = mklocated (getpos acc) (SynLArrow acc ident)
-       return $ foldl bind start access
-
+    let identparser = locate $ fmap SynLIdent $ synident
+        arrowparser =
+            do arrow <- synlex LexArrow
+               ident <- synident
+               return (getpos arrow, Left ident)
+        indexparser =
+            do lb <- synlex LexLBracket
+               exprs <- synexpr `sepBy` synlex LexComma
+               synlex LexRBracket
+               return (getpos lb, Right exprs)
+        buildlv loclv (loc, Left locident) =
+            mklocated loc (SynLArrow loclv locident)
+        buildlv loclv (loc, Right locidxs) =
+            mklocated loc (SynLIndex loclv locidxs)
+     in do ident <- identparser
+           accs <- many (arrowparser <|> indexparser)
+           return $ foldl buildlv ident accs
+    
 
 data SynLValueList = SynLValueList { getlvaluelist :: [Located SynLValue] } deriving (Show)
 
@@ -740,8 +752,6 @@ synexprAccess =
      in do expr <- synexprUnit
            accs <- many (arrowparser <|> indexparser)
            return $ foldl buildexpr expr accs
-
-
 
 
 -- | Binary operator syntactic parser

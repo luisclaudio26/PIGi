@@ -417,9 +417,35 @@ setStructField (StructVal tp vals) fieldname val' = StructVal tp vals'
           vals' = bef ++ [val'] ++ aft
 
 
--- | Get value by access path (incomplete)
+-- | Get matrix value at indices
+getMatVal :: Val -> [Int] -> Val
+getMatVal (MatVal _ _ mat) [i, j] = (mat !! i) !! j
+getMatVal (MatVal m n mat) [i] = (mat !! row) !! col
+    where row = div i n
+          col = mod i n
+
+
+-- | Set matrix value at indices 
+setMatVal :: Val -> [Int] -> Val -> Val
+setMatVal (MatVal m n mat) idxs val' = MatVal m n mat'
+    where row = case idxs of
+                  [i, _] -> i
+                  [i] -> div i n
+          col = case idxs of
+                  [_, j] -> j
+                  [i] -> mod i n
+          rowbef = take col (mat !! row)
+          rowaft = drop (col+1) (mat !! row)
+          row' = rowbef ++ [val'] ++ rowaft
+          matbef = take row mat
+          mataft = drop (row+1) mat
+          mat' = matbef ++ [row'] ++ mataft
+
+
+-- | Get value by access path
 getValAccess :: Val -> [Access] -> Val
 getValAccess val [] = val
+getValAccess matval [Index is] = getMatVal matval is
 getValAccess structval (Field s:as) =
     getValAccess (getStructField structval s) as
 
@@ -427,6 +453,7 @@ getValAccess structval (Field s:as) =
 -- | Set value by access path
 setValAccess :: Val -> [Access] -> Val -> Val
 setValAccess val [] val' = val'
+setValAccess mat [Index is] val' = setMatVal mat is val'
 setValAccess st (Field field:as) val' =
     setStructField st field (setValAccess fval as val')
     where fval = getStructField st  field
