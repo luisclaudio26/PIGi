@@ -5,7 +5,7 @@ pigi
 
 # Files .pig
 *.pig
-!problem1.pig
+!problem*.pig
 
 # Created by https://www.gitignore.io/api/haskell,sublimetext,vim
 
