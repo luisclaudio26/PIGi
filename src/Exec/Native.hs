@@ -96,7 +96,7 @@ floatCast [IntVal i] = return [FloatVal $ fromIntegral i]
 strCast :: [Val] -> Exec [Val]
 strCast [IntVal i] = return [StrVal $ show i]
 strCast [FloatVal f] = return [StrVal $ show f]
-strCast [BoolVal b] = return [StrVal $ if b then "true" else "false"]
+strCast [BoolVal b] = return [StrVal $ if b then "True" else "False"]
 strCast [MatVal _ _ mat] = return [StrVal $ show mat]
 
 intToBool :: [Val] -> Exec [Val]
