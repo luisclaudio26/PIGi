@@ -570,7 +570,7 @@ checkExpr st se = case se of
                                       Left msg -> Left msg
                                       Right l1 -> if (head $ words $ head l1) == "struct"
                                                       then searchStructField (snd st) (last $ words $ head l1) $ getlabel $ ignorepos e2
-                                                      else Left "Operator '->' expects a struct as a left operand."
+                                                      else Left $ "Operator '->' expects a struct as a left operand: " ++ (show e1) ++ " -> "++ (show e2)
                   SynExp e1 e2 -> case checkExpr st $ ignorepos e1 of
                                     Left msg -> Left msg
                                     Right l1 -> if l1 == ["int"] || l1 == ["float"]
