@@ -17,7 +17,5 @@ proc main ()
 }
 
 func resp: float = problem1(x, y: float, c: int){
-	def aux: float;
-	aux = x*x - y; # change to ^2
-	resp = aux + toFloat(c);
+	resp = x^toFloat(2) - y + toFloat(c);
 }
