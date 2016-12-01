@@ -53,7 +53,8 @@ symbolTable = [Procedure "print" ["int"]
                 where floatList n = ["float" | _ <- [1..n]]
 
 data Field = Field { getFieldName :: String
-                   , getFieldType :: String } deriving (Show)
+                   , getFieldType :: String
+                   , fieldMutable :: Bool } deriving (Show)
 
 data UTEntry = StructEntry { getStructId :: String     -- Type name
                           , getStructFields :: [Field] } -- List of fields defined inside this struct
@@ -118,7 +119,8 @@ buildFieldsList (h:t) = entry : (buildFieldsList t)
                         where
                           nam = getlabel . ignorepos . getTypedIdentName $ h
                           typ = getlabel . ignorepos . getTypeIdent . ignorepos . getTypedIdentType $ h
-                          entry = Field nam typ
+                          annot = interpretAnnotation (getAnnotation . ignorepos . getTypedIdentType $ h) True
+                          entry = Field nam typ annot
 
 makeStructConstructor :: SynStruct -> STEntry
 makeStructConstructor stct = Function name args (name:[])
@@ -212,20 +214,6 @@ isElemSymbolTable s lvl (h:t) = case h of
 -----------------------------------
 --------- Static analyzer --------- TODO: Move this to another file when 
 -----------------------------------       things get more structured.
-
-{- DROPPED. This is not useful anymore, as certainly
-    we'll have only one rule for modules. This idea for
-    chaining rules is "good", though, so I'll leave it
-    here so I can copy/paste it someday.
-
--- This applies all the static semantic rules to x.
--- Notice this will apply rules in inverse order, but
--- we assume them to be commutative somehow (that is,
--- order of verification should not be important).
-semModule' :: [SynModule -> Either String SynModule] -> SynModule -> Either String SynModule
-semModule' [] x = Right x
-semModule' (rule:tail) x  = (semModule' tail x) >>= rule -}
-
 -- Checking rules: each of these rules check SynStuff for
 -- soundness (according to soundness rules of each syntactic construct).
 -- The general idea is: the soundness of a syntactic construct
