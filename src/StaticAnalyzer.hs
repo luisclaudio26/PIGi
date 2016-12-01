@@ -374,6 +374,7 @@ checkWhile st lvl sw = case exprOk of
 
 checkAttr :: SuperTable -> SynAttr -> Either String SynAttr
 checkAttr st sa@(SynAttr si se) = do assertListMutable st lvalues
+                                     fail $ show st
                                      s1 <- buildIdentTypeList st lvalues
                                      s2 <- buildExprTypeList st (ignorepos `fmap` se)
                                      if typeListsEqual s1 s2 == True
@@ -408,20 +409,53 @@ assertIdentMutable st si = do var <- searchSTEntry (fst st) lb
                            where
                               lb = getlabel si
 
-assertFieldMutable :: SuperTable -> SynIdent -> SynLValue -> Either String()
-assertFieldMutable st fld path = fail $ (show st)
+assertFieldMutable :: SuperTable -> SynIdent -> SynLValue -> Either String ()
+assertFieldMutable st fld path = do entry <- searchStructEntry (snd st) head
+                                    field <- searchFieldInStruct (getStructFields entry) nam
+                                    if fieldMutable field
+                                      then return ()
+                                      else fail $ "Field is not mutable: "
+                                 where
+                                    nam = getlabel fld
+                                    head = getHeadType st path
 
-{- data SynLValue = SynLIdent { getField :: Located SynIdent }
+-- For stuff with form "a->b->c", "b[3,4]->c", etc.,
+-- this function tries to get the type of the second
+-- to last identifier.
+getHeadType :: SuperTable -> SynLValue -> String
+getHeadType st si@(SynLIdent f) = case identType st (ignorepos f) of
+                                    Left msg -> show st
+                                    Right t -> t
+getHeadType st sa@(SynLArrow p f) = getlabel (ignorepos f)
+getHeadType st si@(SynLIndex p i) = (getHeadType st) . ignorepos $ p 
+
+{-
+
+data SynLValue = SynLIdent { getField :: Located SynIdent }
                | SynLArrow { getPath :: Located SynLValue
                            , getField :: Located SynIdent
                            }
                | SynLIndex { getPath :: Located SynLValue
                            , getIndex :: [Located SynExpr] }
-
-
-
+               deriving (Show)
 
 -}
+
+searchStructEntry :: UserTypeTable -> String -> Either String UTEntry
+searchStructEntry [] name = fail $ "Struct not defined: " ++ name
+searchStructEntry (h:t) name = case h of
+                                  se@(StructEntry n _) -> if n == name
+                                                          then return se
+                                                          else searchTheRest
+                                  Primitive _ -> searchTheRest
+                               where
+                                  searchTheRest = searchStructEntry t name
+
+searchFieldInStruct :: [Field] -> String -> Either String Field
+searchFieldInStruct [] name = fail $ "Field not defined: " ++ name
+searchFieldInStruct (h:t) name = if getFieldName h == name
+                                  then return h
+                                  else searchFieldInStruct t name
                                                                 
 typeListsEqual :: [String] -> [String] -> Bool
 typeListsEqual [] [] = True
@@ -429,6 +463,8 @@ typeListsEqual (h1:t1) (h2:t2) = if h1 /= h2 && h1 /= "_"
                                     then False
                                     else typeListsEqual t1 t2
            
+-- ERROR HERE!!!! passing the name of the identifier in searchStructField
+-- instead of the type. Fix this.
 buildIdentTypeList :: SuperTable -> [SynLValue] -> Either String [String]
 buildIdentTypeList st [] = Right []
 buildIdentTypeList st (h:t) = case h of
@@ -440,7 +476,7 @@ buildIdentTypeList st (h:t) = case h of
                                 SynLArrow mama field -> case ignorepos mama of
                                                           SynLIdent si2 -> searchStructField (snd st) (getlabel $ ignorepos si2) (getlabel $ ignorepos field)
                                                           SynLArrow _ _ -> Left "not yet implemented" 
- 
+                                                        
 buildExprTypeList :: SuperTable -> [SynExpr] -> Either String [String]
 buildExprTypeList st [] = Right []
 buildExprTypeList st (h:t) = case checkExpr st h of
@@ -460,7 +496,7 @@ identType (syt, utt) si@(SynIdent s) = if s == "_"
 
 -- PENDING !!! [LUÍS] Verificar o nível do símbolo ao buscar
 searchSymbolTable :: [STEntry] -> String -> Either String String
-searchSymbolTable [] s = Left "Variable not defined."
+searchSymbolTable [] s = Left $ "Variable not defined: " ++ s
 searchSymbolTable (h:t) s = case h of 
                                 Variable name vtype _ _ -> if name == s
                                                             then Right vtype
@@ -493,7 +529,7 @@ procInST (h:t) pName pArgs = case h of
                              where searchTheRest = procInST t pName pArgs 
 
 searchUserTypeTable :: [UTEntry] -> String -> Either String String
-searchUserTypeTable [] s = Left "Variable not defined."
+searchUserTypeTable [] s = Left $ "Variable not defined: " ++ s
 searchUserTypeTable (h:t) s = case h of
                                 StructEntry name _ -> if name == s
                                                           then Right $ "struct " ++ name
@@ -501,7 +537,7 @@ searchUserTypeTable (h:t) s = case h of
                                 _ -> searchUserTypeTable t s
 
 searchStructField :: [UTEntry] -> String -> String -> Either String [String]
-searchStructField [] struct field = Left "Variable not defined."
+searchStructField [] struct field = Left $ "Field not defined: [" ++ field ++ "] in struct [" ++ struct ++ "]"
 searchStructField (h:t) struct field = case h of
                                         StructEntry name l -> if name == struct
                                                                   then structFieldType l field
