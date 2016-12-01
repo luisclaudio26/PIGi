@@ -472,20 +472,22 @@ buildExprTypeList st (h:t) = case checkExpr st h of
                                             Right l -> Right $ s ++ l
 
 identType :: SuperTable -> SynIdent -> Either String String
-identType (syt, utt) si@(SynIdent s) = if s == "_"
+identType st si@(SynIdent s) = if s == "_"
                                           then Right s
-                                          else case searchSymbolTable syt s of
+                                          else case searchSymbolTable (fst st) s of
                                             Right vtype -> Right vtype
-                                            Left _ -> case searchUserTypeTable utt s of
-                                                        Right ftype -> Right ftype
-                                                        Left msg -> Left msg 
+                                            Left msg -> Left msg
 
 -- PENDING !!! [LUÍS] Verificar o nível do símbolo ao buscar
 searchSymbolTable :: [STEntry] -> String -> Either String String
 searchSymbolTable [] s = Left $ "Variable not defined: " ++ s
 searchSymbolTable (h:t) s = case h of 
                                 Variable name vtype _ _ -> if name == s
-                                                            then Right vtype
+                                                            then if vtype /= "int" && vtype /= "float" && vtype /= "bool" && vtype /= "vec" && 
+                                                                    vtype /= "vec2" && vtype /= "vec3" && vtype /= "vec4" && vtype /= "mat" && 
+                                                                    vtype /= "mat2" && vtype /= "mat3" && vtype /= "mat4" && vtype /= "string"
+                                                                    then Right $ "struct " ++ vtype
+                                                                    else Right vtype
                                                             else searchSymbolTable t s
                                 _ -> searchSymbolTable t s
 
@@ -514,13 +516,13 @@ procInST (h:t) pName pArgs = case h of
                                                         else searchTheRest
                              where searchTheRest = procInST t pName pArgs 
 
-searchUserTypeTable :: [UTEntry] -> String -> Either String String
+{-searchUserTypeTable :: [UTEntry] -> String -> Either String String
 searchUserTypeTable [] s = Left $ "Variable not defined: " ++ s
 searchUserTypeTable (h:t) s = case h of
                                 StructEntry name _ -> if name == s
-                                                          then Right $ "struct " ++ name
+                                                          then Right $ "struct " ++ 
                                                           else searchUserTypeTable t s
-                                _ -> searchUserTypeTable t s
+                                _ -> searchUserTypeTable t s-}
 
 searchStructField :: [UTEntry] -> String -> String -> Either String [String]
 searchStructField [] struct field = Left $ "Field not defined: [" ++ field ++ "] in struct [" ++ struct ++ "]"
