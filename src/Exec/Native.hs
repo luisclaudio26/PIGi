@@ -1,4 +1,9 @@
-module Exec.Native (nativeProcs, nativeFuncs) where
+module Exec.Native (
+    nativeProcs, 
+    nativeFuncs, 
+    nativeStructs,
+    vec2,
+    mat2) where
 
 import Prelude hiding (print)
 import Types
@@ -102,6 +107,20 @@ strCast [MatVal _ _ mat] = return [StrVal $ show mat]
 intToBool :: [Val] -> Exec [Val]
 intToBool [IntVal i] = return [BoolVal (i /= 0)]
 
+
+toMat :: [Val] -> Exec [Val]
+toMat [StructVal vec2 [x, y]] = return [MatVal 2 1 [[x],[y]]]
+toMat [StructVal vec2 [xx, xy, yx, yy]] = return [MatVal 2 2 [[xx, xy],[yx, yy]]]
+
+toVec2 :: [Val] -> Exec [Val]
+toVec2 [MatVal 2 1 [[x], [y]]] = return [StructVal vec2 [x, y]]
+toVec2 [MatVal 1 2 [[x, y]]] = return [StructVal vec2 [x, y]]
+
+
+toMat2 :: [Val] -> Exec [Val]
+toMat2 [MatVal 2 2 [[xx,xy],[yx,yy]]] = return [StructVal mat2 [xx, xy, yx, yy]]
+
+
 nativeFuncs :: [Func]
 nativeFuncs =
     [NativeFunc "rows" (FuncType [IntType] [annMat]) rows
@@ -117,6 +136,20 @@ nativeFuncs =
     ,NativeFunc "toString" (FuncType [StrType] [annBool]) strCast
     ,NativeFunc "toString" (FuncType [StrType] [annMat]) strCast
     ,NativeFunc "toBool" (FuncType [BoolType] [annInt]) intToBool
+    ,NativeFunc "toMat" (FuncType [MatType] [annVec2]) toMat
+    ,NativeFunc "toMat" (FuncType [MatType] [annMat2]) toMat
+    ,NativeFunc "toMat2" (FuncType [mat2] [annMat]) toMat2
     ]
 
 
+-- == Native structs
+vec2 = StructType "vec2" [("x", FloatType), ("y", FloatType)]
+
+mat2 = StructType "mat2" [("xx", FloatType), ("xy", FloatType)
+                         ,("yx", FloatType), ("yy", FloatType)]
+
+annVec2 = toAnnType vec2
+annMat2 = toAnnType mat2
+
+nativeStructs :: [Type]
+nativeStructs = [vec2, mat2]

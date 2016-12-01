@@ -4,6 +4,7 @@ import Data.Bits
 import Data.Foldable
 import Control.Monad
 import Exec.Prim
+import Exec.Native
 import PosParsec
 import Types
 import Syntactic
@@ -27,6 +28,14 @@ bitNotVal :: Val -> Exec Val
 bitNotVal (IntVal i) = return $ IntVal $ complement i
 
 
+-- | Execution to obtain the dot product
+dotVal :: Val -> Val -> Exec Val
+dotVal (StructVal (StructType "vec2" _) vs1)
+       (StructVal (StructType "vec2" _) vs2) =
+    do vs <- zipWithM timesVal vs1 vs2
+       plusVal (vs !! 0) (vs !! 1)
+
+
 -- | Execution to multiply two values
 timesVal :: Val -> Val -> Exec Val
 timesVal (IntVal i1) (IntVal i2) = return $ IntVal $ i1 * i2
@@ -40,6 +49,15 @@ timesVal (MatVal m1 n1 mat1) (MatVal m2 n2 mat2)
         sumVals = foldlM plusVal (FloatVal 0)
         mults i j = zipWithM timesVal (matRow mat1 i) (matCol mat2 j)
         valAt (i,j) = mults i j >>= sumVals
+timesVal (StructVal (StructType "mat2" _) [xx, xy, yx, yy])
+         (StructVal (StructType "vec2" _) [x, y]) =
+             do xx' <- xx `timesVal` x
+                xy' <- xy `timesVal` y
+                x' <- xx' `plusVal` xy'
+                yx' <- yx `timesVal` x
+                yy' <- yy `timesVal` y
+                y' <- yx' `plusVal` yy'
+                return $ StructVal vec2 [x', y']
 
 
 -- | Execution to multiply two values

@@ -109,6 +109,7 @@ evalExpr = eval . ignorepos
           eval (SynBitNot e) = evalUn bitNotVal e
           eval (SynTimes e1 e2) = evalBin timesVal e1 e2
           eval (SynDiv e1 e2) = evalBin divVal e1 e2
+          eval (SynDot e1 e2) = evalBin dotVal e1 e2
           eval (SynDotTimes e1 e2) = evalBin dotTimesVal e1 e2
           eval (SynDotDiv e1 e2) = evalBin dotDivVal e1 e2
           eval (SynMod e1 e2) = evalBin modVal e1 e2
@@ -358,6 +359,9 @@ loadNativeSymbols :: Exec ()
 loadNativeSymbols =
     do mapM_ registerProc nativeProcs
        mapM_ registerFunc nativeFuncs
+       mapM_ registerStruct nativeStructs
+       mapM_ (registerFunc . mkConstr) nativeStructs
+
 
 -- | Load global variables, procedures, functions ans structs
 loadModuleSymbols :: SynModule -> Exec ()
@@ -375,7 +379,6 @@ loadModuleSymbols mod = mapM_ loadSymbol (modStmts mod)
             do let sttype = toType locstruct
                registerStruct sttype
                registerFunc $ mkConstr sttype
-
         
 
 -- | Module execution
