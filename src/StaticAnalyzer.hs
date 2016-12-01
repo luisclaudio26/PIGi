@@ -44,6 +44,7 @@ symbolTable = [Procedure "print" ["int"]
               ,Function "toFloat" ["int"] ["float"]
               ,Function "toBool" ["int"] ["bool"]
               ,Function "toString" ["int"] ["string"]
+              ,Function "toString" ["float"] ["string"]
               ,Function "readInt" [] ["int"]
 
               ,Function "vec2" (floatList 2) ["vec2"]
