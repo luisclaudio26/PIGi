@@ -47,6 +47,7 @@ symbolTable = [Procedure "print" ["int"]
               ,Function "toString" ["float"] ["string"]
               ,Function "readInt" [] ["int"]
               ,Function "readFloat" [] ["float"]
+              ,Function "zeros" ["int", "int"] ["mat"]
 
               ,Function "vec2" (floatList 2) ["vec2"]
               ,Function "vec3" (floatList 3) ["vec3"]
@@ -141,7 +142,7 @@ stFromDef st lvl (SynDef typedId) = stFromTypedIdentList st True lvl typedId
 stFromProc :: SuperTable -> SynProc -> Either String SuperTable
 stFromProc st  (SynProc name _ formalParam block) = let n = getlabel $ ignorepos name in
                                                           if isElemUserTypeTable n  (snd st) || isElemSymbolTable n 0 (fst st)
-                                                            then Left "Name already being used as a type name or variable name."
+                                                            then Left $ "Name already being used as a type name or variable name: " ++ n
                                                             else Right (syt, (snd st))
                                                                 where syt = entry : (fst st)
                                                                       entry = Procedure (getlabel $ ignorepos name)
@@ -150,7 +151,7 @@ stFromProc st  (SynProc name _ formalParam block) = let n = getlabel $ ignorepos
 stFromFunc :: SuperTable -> SynFunc -> Either String SuperTable
 stFromFunc st  (SynFunc name _ formalParam ret block) = let n = getlabel $ ignorepos name in
                                                         if isElemUserTypeTable n (snd st) || isElemSymbolTable n 0 (fst st)
-                                                        then Left "Name already being used as a type name or variable name."
+                                                        then Left $ "Name already being used as a type name or variable name: " ++ n
                                                         else Right (syt, (snd st))
                                                                 where syt = entry : (fst st)
                                                                       entry = Function (getlabel $ ignorepos name)
@@ -173,7 +174,7 @@ stFromTypedIdentList :: SuperTable -> Bool -> Int -> [SynTypedIdent] -> Either S
 stFromTypedIdentList st defaultMut lvl [] = Right st
 stFromTypedIdentList st defaultMut lvl (h:t) = let name = getlabel $ ignorepos $ getTypedIdentName h in
                                         if isElemUserTypeTable name (snd st) || isElemSymbolTable name lvl (fst st)
-                                            then Left "Name already being used as a type name or variable name." 
+                                            then Left $ "Name already being used as a type name or variable name: " ++ name 
                                             else stFromTypedIdentList (newST, snd st) defaultMut lvl t
                                                   where newST = entry : (fst st)
                                                         entry = Variable (getlabel $ ignorepos $ getTypedIdentName h) 
@@ -437,11 +438,13 @@ searchFieldInStruct (h:t) name = if getFieldName h == name
                                                                 
 typeListsEqual :: [String] -> [String] -> Bool
 typeListsEqual [] [] = True
-typeListsEqual (h1:t1) (h2:t2) = if h1 /= h2 && h1 /= "_"
-                                    then if h1 == "mat" && (head $ words h2) == "mat"
-                                          then typeListsEqual t1 t2
-                                          else False
-                                    else typeListsEqual t1 t2
+typeListsEqual l1@(h1:t1) l2@(h2:t2) = if length l1 == length l2
+                                        then if h1 /= h2 && h1 /= "_"
+                                              then if h1 == "mat" && (head $ words h2) == "mat"
+                                                    then typeListsEqual t1 t2
+                                                    else False
+                                              else typeListsEqual t1 t2
+                                       else False
 
 buildIdentTypeList :: SuperTable -> [SynLValue] -> Either String [String]
 buildIdentTypeList st [] = return []
@@ -584,29 +587,40 @@ checkExpr st se = case se of
                                                   else Left "Operator '^' expects operands of type int or float."
                   SynTimes e1 e2 -> case checkExpr st $ ignorepos e1 of
                                       Left msg -> Left msg
-                                      Right l1 -> if l1 == ["int"] || l1 == ["float"]
-                                                    then case checkExpr st $ ignorepos e2 of
-                                                          Left msg -> Left msg
-                                                          Right l2 -> if l2 == ["int"] || l2 == ["float"]
-                                                                        then if l1 == l2
-                                                                                then Right l1
-                                                                                else Left "If the secon operand is of type int or float, operator '*' expects a first operand of same type."
-                                                                        else if (head $ words $ head l2) == "mat"
-                                                                                then if l1 == ["float"]
-                                                                                      then Right l2
-                                                                                      else Left "If the second operand is of type mat, operator '*' expects a first operand of type float or mat."
-                                                                                else Left "If the first operand is of type int or float, operator '*' expects a second operand of type int, float or mat."
-                                                    else if (head $ words $ head l1) == "mat"
+                                      Right l1 -> {-if l1 == ["int"] || l1 == ["float"]
                                                           then case checkExpr st $ ignorepos e2 of
                                                                 Left msg -> Left msg
-                                                                Right l2 -> if l2 == ["float"]
-                                                                              then Right l1
+                                                                Right l2 -> if l2 == ["int"] || l2 == ["float"]
+                                                                              then if l1 == l2
+                                                                                    then Right l1
+                                                                                    else Left "If the secon operand is of type int or float, operator '*' expects a first operand of same type."
                                                                               else if (head $ words $ head l2) == "mat"
+                                                                                    then if l1 == ["float"]
+                                                                                          then Right l2
+                                                                                          else Left "If the second operand is of type mat, operator '*' expects a first operand of type float or mat."
+                                                                                    else Left "If the first operand is of type int or float, operator '*' expects a second operand of type int, float or mat."
+                                                          else if (head $ words $ head l1) == "mat"
+                                                                then case checkExpr st $ ignorepos e2 of
+                                                                  Left msg -> Left msg
+                                                                  Right l2 -> if l2 == ["float"]
+                                                                                then Right l1
+                                                                                else if (head $ words $ head l2) == "mat"
                                                                                       then if (last $ words $ head l1) == (head $ tail $ words $ head l2)
                                                                                             then Right $ ("mat " ++ (head $ tail $ words $ head l1) ++ " " ++ (last $ words $ head l2)) : []
                                                                                             else Left "When multiplying matrices, number of columns of the first one must be equal to the number of lines of the second one."
                                                                                       else Left "If the first operando is of type mat, operator '*' expects a second operand of type float or mat."
-                                                          else Left "Operator '*' expects operands of type int, float or mat."
+                                                          else Left "Operator '*' expects operands of type int, float or mat."-}
+                                                    case checkExpr st $ ignorepos e1 of
+                                                      Left msg -> Left msg
+                                                      Right l1 -> if l1 /= ["bool"]
+                                                                    then case checkExpr st $ ignorepos e2 of
+                                                                          Left msg -> Left msg
+                                                                          Right l2 -> if l2 /= ["bool"]
+                                                                                        then if l1 == l2
+                                                                                              then Right l1
+                                                                                              else Left "Operator '*' expects operands of equal types."
+                                                                                        else Left "Operator '*' expects operands of type int, float or mat."
+                                                                    else Left "Operator '+' expects operands of type int, float or mat."
                   SynDiv e1 e2 -> case checkExpr st $ ignorepos e1 of
                                     Left msg -> Left msg
                                     Right l1 -> if l1 == ["int"] || l1 == ["float"]
