@@ -374,7 +374,6 @@ checkWhile st lvl sw = case exprOk of
 
 checkAttr :: SuperTable -> SynAttr -> Either String SynAttr
 checkAttr st sa@(SynAttr si se) = do assertListMutable st lvalues
-                                     fail $ show st
                                      s1 <- buildIdentTypeList st lvalues
                                      s2 <- buildExprTypeList st (ignorepos `fmap` se)
                                      if typeListsEqual s1 s2 == True
@@ -390,57 +389,33 @@ assertListMutable st (h:t) = do assertMutable st h
                                 return ()
 
 assertMutable :: SuperTable -> SynLValue -> Either String ()
-assertMutable st (SynLIdent f) = do assertIdentMutable st (ignorepos f)
+assertMutable st (SynLIdent f) = do var <- searchSTEntry (fst st) lb
+                                    if isMutable var
+                                      then return ()
+                                      else fail $ "Variable is not mutable: " ++ lb
+                                 where
+                                    lb = getlabel . ignorepos $ f
 
 -- Both field inside the struct and the struct itself
 -- must be mutable. For example, if we have a->b where
 -- 'b' is marked as mutable but 'a' is const, a->b will
 -- be const and therefore we won't let it appear in the
 -- left side of an attribution. 
-assertMutable st (SynLArrow p f) = do assertFieldMutable st (ignorepos f) (ignorepos p)
-                                      assertMutable st (ignorepos p)
-                                      return ()
+assertMutable st (SynLArrow p f) = do pathMut <- assertMutable st (ignorepos p)
+                                      pathTyp <- fieldTypeInLValue st (ignorepos p) 
+                                      entry <- searchStructEntry (snd st) pathTyp
+                                      field <- searchFieldInStruct (getStructFields entry) fieldName
+                                      
+                                      if fieldMutable field
+                                        then return ()
+                                        else fail $ "Field or variable is not mutable: " ++ (show p) ++ " , " ++ (show f)
+                                   where
+                                     fieldName = getlabel . ignorepos $ f
 
-assertIdentMutable :: SuperTable -> SynIdent -> Either String ()
-assertIdentMutable st si = do var <- searchSTEntry (fst st) lb
-                              if isMutable var
-                                then return ()
-                                else fail $ "Variable or field is not mutable: " ++ lb
-                           where
-                              lb = getlabel si
+assertMutable st (SynLIndex p i) = fail $ "Cannot verify indexation yet!"
 
-assertFieldMutable :: SuperTable -> SynIdent -> SynLValue -> Either String ()
-assertFieldMutable st fld path = do entry <- searchStructEntry (snd st) head
-                                    field <- searchFieldInStruct (getStructFields entry) nam
-                                    if fieldMutable field
-                                      then return ()
-                                      else fail $ "Field is not mutable: "
-                                 where
-                                    nam = getlabel fld
-                                    head = getHeadType st path
 
--- For stuff with form "a->b->c", "b[3,4]->c", etc.,
--- this function tries to get the type of the second
--- to last identifier.
-getHeadType :: SuperTable -> SynLValue -> String
-getHeadType st si@(SynLIdent f) = case identType st (ignorepos f) of
-                                    Left msg -> show st
-                                    Right t -> t
-getHeadType st sa@(SynLArrow p f) = getlabel (ignorepos f)
-getHeadType st si@(SynLIndex p i) = (getHeadType st) . ignorepos $ p 
-
-{-
-
-data SynLValue = SynLIdent { getField :: Located SynIdent }
-               | SynLArrow { getPath :: Located SynLValue
-                           , getField :: Located SynIdent
-                           }
-               | SynLIndex { getPath :: Located SynLValue
-                           , getIndex :: [Located SynExpr] }
-               deriving (Show)
-
--}
-
+-----------------------
 searchStructEntry :: UserTypeTable -> String -> Either String UTEntry
 searchStructEntry [] name = fail $ "Struct not defined: " ++ name
 searchStructEntry (h:t) name = case h of
@@ -462,21 +437,23 @@ typeListsEqual [] [] = True
 typeListsEqual (h1:t1) (h2:t2) = if h1 /= h2 && h1 /= "_"
                                     then False
                                     else typeListsEqual t1 t2
-           
--- ERROR HERE!!!! passing the name of the identifier in searchStructField
--- instead of the type. Fix this.
+
 buildIdentTypeList :: SuperTable -> [SynLValue] -> Either String [String]
-buildIdentTypeList st [] = Right []
-buildIdentTypeList st (h:t) = case h of
-                                SynLIdent si -> case identType st $ ignorepos si of
-                                                    Left msg -> Left msg
-                                                    Right s -> case buildIdentTypeList st t of
-                                                                Left msg -> Left msg
-                                                                Right l -> Right $ s : l
-                                SynLArrow mama field -> case ignorepos mama of
-                                                          SynLIdent si2 -> searchStructField (snd st) (getlabel $ ignorepos si2) (getlabel $ ignorepos field)
-                                                          SynLArrow _ _ -> Left "not yet implemented" 
-                                                        
+buildIdentTypeList st [] = return []
+buildIdentTypeList st (h:t) = do typeH <- fieldTypeInLValue st h
+                                 typeT <- buildIdentTypeList st t
+                                 return (typeH : typeT) 
+
+fieldTypeInLValue :: SuperTable -> SynLValue -> Either String String
+fieldTypeInLValue st (SynLIdent i) = identType st (ignorepos i)
+fieldTypeInLValue st (SynLArrow p f) = do path <- fieldTypeInLValue st (ignorepos p)
+                                          entry <- searchStructEntry (snd st) path
+                                          field <- searchFieldInStruct (getStructFields entry) fieldName
+                                          return $ getFieldType field
+                                       where
+                                          fieldName = getlabel . ignorepos $ f
+fieldTypeInLValue st (SynLIndex p i) = fail $ "Checking of indexation not implemented yet!"
+
 buildExprTypeList :: SuperTable -> [SynExpr] -> Either String [String]
 buildExprTypeList st [] = Right []
 buildExprTypeList st (h:t) = case checkExpr st h of
