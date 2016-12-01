@@ -11,16 +11,16 @@ proc main ()
 	number = readFloat();
 	
 	while (number >= 0.0) {
-		if number < 26.0 {
+		if number <= 25.0 {
 			w +=1;
 		}
-		else if number < 51.0 {
+		else if number >= 26.0 and number <= 50.0{
 			x +=1;
 		}
-		else if number < 76.0 {
+		else if number >= 51.0 and number <= 75.0 {
 			y +=1;
 		}
-		else if number < 101.0 {
+		else if number >= 76.0 and number <= 100.0 {
 			z +=1;
 		}
 
@@ -31,4 +31,5 @@ proc main ()
 	println( "Numbers in range: [26, 50]  = " + toString(x) );
     println( "Numbers in range: [51, 75]  = " + toString(y) );
     println( "Numbers in range: [76, 100] = " + toString(z) );
+    println( "Values in [-infinity, 0), (25, 26), (50, 51) and (75, 76) are not counted");
 }

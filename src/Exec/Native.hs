@@ -61,6 +61,11 @@ cols :: [Val] -> Exec [Val]
 cols [MatVal _ c _] = return $ [IntVal c]
 
 
+zeros :: [Val] -> Exec [Val]
+zeros [IntVal m, IntVal n] =
+    return [MatVal m n $ replicate m $ replicate n $ FloatVal 0.0]
+
+
 readLine :: Exec String
 readLine = mkEval $ const getLine
 
@@ -117,6 +122,7 @@ nativeFuncs =
     ,NativeFunc "toString" (FuncType [StrType] [annBool]) strCast
     ,NativeFunc "toString" (FuncType [StrType] [annMat]) strCast
     ,NativeFunc "toBool" (FuncType [BoolType] [annInt]) intToBool
+    ,NativeFunc "zeros" (FuncType [MatType] [annInt, annInt]) zeros 
     ]
 
 
