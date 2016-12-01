@@ -33,6 +33,9 @@ Problema1 : (avaliação de uma expressão) :
     
 Problema2 : (faixa de valores, leitura de valores) :     
 `cabal run Problems/problem2.pig`
+
+Problema4 : (operações com racionais, uso de structs) :   
+`cabal run Problems/problem4.pig`
     
 Problema5 : (mdc, uso de recursão) :      
 `cabal run Problems/problem5.pig`

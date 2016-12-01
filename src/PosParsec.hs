@@ -18,6 +18,10 @@ instance (AnnotatedTyped a) => AnnotatedTyped (Located a) where
 instance (Named a) => Named (Located a) where
     getName loc = getName $ ignorepos loc
 
+instance Functor Located where
+    fmap f (Located (pos, x)) = Located (pos, f x)
+
+
 -- | Remove position from located
 ignorepos :: Located a -> a
 ignorepos (Located p) = snd p

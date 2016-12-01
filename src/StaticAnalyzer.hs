@@ -47,6 +47,7 @@ symbolTable = [Procedure "print" ["int"]
               ,Function "toString" ["float"] ["string"]
               ,Function "readInt" [] ["int"]
               ,Function "readFloat" [] ["float"]
+              ,Function "zeros" ["int", "int"] ["mat"]
 
               ,Function "vec2" (floatList 2) ["vec2"]
               ,Function "vec3" (floatList 3) ["vec3"]
@@ -57,7 +58,8 @@ symbolTable = [Procedure "print" ["int"]
                 where floatList n = ["float" | _ <- [1..n]]
 
 data Field = Field { getFieldName :: String
-                   , getFieldType :: String } deriving (Show)
+                   , getFieldType :: String
+                   , fieldMutable :: Bool } deriving (Show)
 
 data UTEntry = StructEntry { getStructId :: String     -- Type name
                           , getStructFields :: [Field] } -- List of fields defined inside this struct
@@ -111,9 +113,19 @@ stFromStruct st stct = if isElemUserTypeTable structName (snd st) || isElemSymbo
                         else Right (newSymbolTable, newTypeTable)
                        where
                         structName = getlabel $ ignorepos $ getStructName stct
-                        newTypeTable = newTTEntry : (snd st)
-                        newTTEntry = StructEntry (getlabel $ ignorepos $ getStructName stct) ([])
                         newSymbolTable = (makeStructConstructor stct) : (fst st)
+                        newTypeTable = newTTEntry : (snd st)
+                        newTTEntry = StructEntry (getlabel $ ignorepos $ getStructName stct) structFields
+                        structFields = buildFieldsList (getTuple stct)
+
+buildFieldsList :: [SynTypedIdent] -> [Field]
+buildFieldsList [] = []
+buildFieldsList (h:t) = entry : (buildFieldsList t)
+                        where
+                          nam = getlabel . ignorepos . getTypedIdentName $ h
+                          typ = getlabel . ignorepos . getTypeIdent . ignorepos . getTypedIdentType $ h
+                          annot = interpretAnnotation (getAnnotation . ignorepos . getTypedIdentType $ h) True
+                          entry = Field nam typ annot
 
 makeStructConstructor :: SynStruct -> STEntry
 makeStructConstructor stct = Function name args (name:[])
@@ -130,7 +142,7 @@ stFromDef st lvl (SynDef typedId) = stFromTypedIdentList st True lvl typedId
 stFromProc :: SuperTable -> SynProc -> Either String SuperTable
 stFromProc st  (SynProc name _ formalParam block) = let n = getlabel $ ignorepos name in
                                                           if isElemUserTypeTable n  (snd st) || isElemSymbolTable n 0 (fst st)
-                                                            then Left "Name already being used as a type name or variable name."
+                                                            then Left $ "Name already being used as a type name or variable name: " ++ n
                                                             else Right (syt, (snd st))
                                                                 where syt = entry : (fst st)
                                                                       entry = Procedure (getlabel $ ignorepos name)
@@ -139,7 +151,7 @@ stFromProc st  (SynProc name _ formalParam block) = let n = getlabel $ ignorepos
 stFromFunc :: SuperTable -> SynFunc -> Either String SuperTable
 stFromFunc st  (SynFunc name _ formalParam ret block) = let n = getlabel $ ignorepos name in
                                                         if isElemUserTypeTable n (snd st) || isElemSymbolTable n 0 (fst st)
-                                                        then Left "Name already being used as a type name or variable name."
+                                                        then Left $ "Name already being used as a type name or variable name: " ++ n
                                                         else Right (syt, (snd st))
                                                                 where syt = entry : (fst st)
                                                                       entry = Function (getlabel $ ignorepos name)
@@ -162,7 +174,7 @@ stFromTypedIdentList :: SuperTable -> Bool -> Int -> [SynTypedIdent] -> Either S
 stFromTypedIdentList st defaultMut lvl [] = Right st
 stFromTypedIdentList st defaultMut lvl (h:t) = let name = getlabel $ ignorepos $ getTypedIdentName h in
                                         if isElemUserTypeTable name (snd st) || isElemSymbolTable name lvl (fst st)
-                                            then Left "Name already being used as a type name or variable name." 
+                                            then Left $ "Name already being used as a type name or variable name: " ++ name 
                                             else stFromTypedIdentList (newST, snd st) defaultMut lvl t
                                                   where newST = entry : (fst st)
                                                         entry = Variable (getlabel $ ignorepos $ getTypedIdentName h) 
@@ -207,20 +219,6 @@ isElemSymbolTable s lvl (h:t) = case h of
 -----------------------------------
 --------- Static analyzer --------- TODO: Move this to another file when 
 -----------------------------------       things get more structured.
-
-{- DROPPED. This is not useful anymore, as certainly
-    we'll have only one rule for modules. This idea for
-    chaining rules is "good", though, so I'll leave it
-    here so I can copy/paste it someday.
-
--- This applies all the static semantic rules to x.
--- Notice this will apply rules in inverse order, but
--- we assume them to be commutative somehow (that is,
--- order of verification should not be important).
-semModule' :: [SynModule -> Either String SynModule] -> SynModule -> Either String SynModule
-semModule' [] x = Right x
-semModule' (rule:tail) x  = (semModule' tail x) >>= rule -}
-
 -- Checking rules: each of these rules check SynStuff for
 -- soundness (according to soundness rules of each syntactic construct).
 -- The general idea is: the soundness of a syntactic construct
@@ -380,42 +378,95 @@ checkWhile st lvl sw = case exprOk of
                           blockOk = checkBlock st (lvl+1) (getWhileBlock sw)
 
 checkAttr :: SuperTable -> SynAttr -> Either String SynAttr
-checkAttr st sa@(SynAttr si se) = do assertMutable st (ignorepos `fmap` si)
-                                     s1 <- buildIdentTypeList st (ignorepos `fmap` si)
+checkAttr st sa@(SynAttr si se) = do assertListMutable st lvalues
+                                     s1 <- buildIdentTypeList st lvalues
                                      s2 <- buildExprTypeList st (ignorepos `fmap` se)
                                      if typeListsEqual s1 s2 == True
                                         then Right sa
                                         else Left "Variable and expression have different types in attribution."
+                                    where
+                                      lvalues = ignorepos `fmap` si
 
-assertMutable :: SuperTable -> [SynIdent] -> Either String ()
-assertMutable st [] = Right ()
-assertMutable st (h:t) = do var <- searchSTEntry (fst st) (getlabel h)
-                            if isMutable var
-                              then return ()
-                              else fail $ "Variable is not mutable: " ++ (getlabel h)
+assertListMutable :: SuperTable -> [SynLValue] -> Either String ()
+assertListMutable st [] = return ()
+assertListMutable st (h:t) = do assertMutable st h
+                                assertListMutable st t
+                                return ()
 
-{- LEGACY:
-case buildIdentTypeList st (ignorepos `fmap` si) of
-  Left msg -> Left msg
-  Right s1 -> case buildExprTypeList st (ignorepos `fmap` se) of
-                Left msg -> Left msg
-                Right s2 -> if typeListsEqual s1 s2
-                              then Right sa
-                              else Left "Variable and expression have different types in attribution." -}
+assertMutable :: SuperTable -> SynLValue -> Either String ()
+assertMutable st (SynLIdent f) = do var <- searchSTEntry (fst st) lb
+                                    if isMutable var
+                                      then return ()
+                                      else fail $ "Variable is not mutable: " ++ lb
+                                 where
+                                    lb = getlabel . ignorepos $ f
+
+-- Both field inside the struct and the struct itself
+-- must be mutable. For example, if we have a->b where
+-- 'b' is marked as mutable but 'a' is const, a->b will
+-- be const and therefore we won't let it appear in the
+-- left side of an attribution. 
+assertMutable st (SynLArrow p f) = do pathMut <- assertMutable st (ignorepos p)
+                                      pathTyp <- fieldTypeInLValue st (ignorepos p) 
+                                      entry <- searchStructEntry (snd st) pathTyp
+                                      field <- searchFieldInStruct (getStructFields entry) fieldName
+                                      
+                                      if fieldMutable field
+                                        then return ()
+                                        else fail $ "Field or variable is not mutable: " ++ (show p) ++ " , " ++ (show f)
+                                   where
+                                     fieldName = getlabel . ignorepos $ f
+
+assertMutable st (SynLIndex p i) = assertMutable st (ignorepos p)
+
+-----------------------
+searchStructEntry :: UserTypeTable -> String -> Either String UTEntry
+searchStructEntry [] name = fail $ "Struct not defined: " ++ name
+searchStructEntry (h:t) name = case h of
+                                  se@(StructEntry n _) -> if n == name
+                                                          then return se
+                                                          else searchTheRest
+                                  Primitive _ -> searchTheRest
+                               where
+                                  searchTheRest = searchStructEntry t name
+
+searchFieldInStruct :: [Field] -> String -> Either String Field
+searchFieldInStruct [] name = fail $ "Field not defined: " ++ name
+searchFieldInStruct (h:t) name = if getFieldName h == name
+                                  then return h
+                                  else searchFieldInStruct t name
                                                                 
 typeListsEqual :: [String] -> [String] -> Bool
 typeListsEqual [] [] = True
-typeListsEqual (h1:t1) (h2:t2) = if h1 /= h2 && h1 /= "_"
-                                    then False
-                                    else typeListsEqual t1 t2
-           
-buildIdentTypeList :: SuperTable -> [SynIdent] -> Either String [String]
-buildIdentTypeList st [] = Right []
-buildIdentTypeList st (h:t) = case identType st h of
-                                Left msg -> Left msg
-                                Right s -> case buildIdentTypeList st t of
-                                            Left msg -> Left msg
-                                            Right l -> Right $ s : l
+typeListsEqual l1@(h1:t1) l2@(h2:t2) = if length l1 == length l2
+                                        then if h1 /= h2 && h1 /= "_"
+                                              then if h1 == "mat" && (head $ words h2) == "mat"
+                                                    then typeListsEqual t1 t2
+                                                    else False
+                                              else typeListsEqual t1 t2
+                                       else False
+
+buildIdentTypeList :: SuperTable -> [SynLValue] -> Either String [String]
+buildIdentTypeList st [] = return []
+buildIdentTypeList st (h:t) = do typeH <- fieldTypeInLValue st h
+                                 typeT <- buildIdentTypeList st t
+                                 return (typeH : typeT) 
+
+fieldTypeInLValue :: SuperTable -> SynLValue -> Either String String
+fieldTypeInLValue st (SynLIdent i) = identType st (ignorepos i)
+fieldTypeInLValue st (SynLArrow p f) = do path <- fieldTypeInLValue st (ignorepos p)
+                                          entry <- searchStructEntry (snd st) path
+                                          field <- searchFieldInStruct (getStructFields entry) fieldName
+                                          return $ getFieldType field
+                                       where
+                                          fieldName = getlabel . ignorepos $ f
+fieldTypeInLValue st (SynLIndex p i) = do checkExprList st (ignorepos `fmap` i)
+                                          return "float" -- TEMPORARY, because matrices are always float
+
+checkExprList :: SuperTable -> [SynExpr] -> Either String ()
+checkExprList st [] = return ()
+checkExprList st (h:t) = do checkExpr st h
+                            checkExprList st t
 
 buildExprTypeList :: SuperTable -> [SynExpr] -> Either String [String]
 buildExprTypeList st [] = Right []
@@ -426,17 +477,15 @@ buildExprTypeList st (h:t) = case checkExpr st h of
                                             Right l -> Right $ s ++ l
 
 identType :: SuperTable -> SynIdent -> Either String String
-identType (syt, utt) si@(SynIdent s) = if s == "_"
+identType st si@(SynIdent s) = if s == "_"
                                           then Right s
-                                          else case searchSymbolTable syt s of
+                                          else case searchSymbolTable (fst st) s of
                                             Right vtype -> Right vtype
-                                            Left _ -> case searchUserTypeTable utt s of
-                                                        Right ftype -> Right ftype
-                                                        Left msg -> Left msg 
+                                            Left msg -> Left msg
 
 -- PENDING !!! [LUÍS] Verificar o nível do símbolo ao buscar
 searchSymbolTable :: [STEntry] -> String -> Either String String
-searchSymbolTable [] s = Left "Variable not defined."
+searchSymbolTable [] s = Left $ "Variable not defined: " ++ s
 searchSymbolTable (h:t) s = case h of 
                                 Variable name vtype _ _ -> if name == s
                                                             then Right vtype
@@ -468,16 +517,16 @@ procInST (h:t) pName pArgs = case h of
                                                         else searchTheRest
                              where searchTheRest = procInST t pName pArgs 
 
-searchUserTypeTable :: [UTEntry] -> String -> Either String String
-searchUserTypeTable [] s = Left "Variable not defined."
+{-searchUserTypeTable :: [UTEntry] -> String -> Either String String
+searchUserTypeTable [] s = Left $ "Variable not defined: " ++ s
 searchUserTypeTable (h:t) s = case h of
                                 StructEntry name _ -> if name == s
-                                                          then Right $ "struct " ++ name
+                                                          then Right $ "struct " ++ 
                                                           else searchUserTypeTable t s
-                                _ -> searchUserTypeTable t s
+                                _ -> searchUserTypeTable t s-}
 
 searchStructField :: [UTEntry] -> String -> String -> Either String [String]
-searchStructField [] struct field = Left "Variable not defined."
+searchStructField [] struct field = Left $ "Field not defined: [" ++ field ++ "] in struct [" ++ struct ++ "]"
 searchStructField (h:t) struct field = case h of
                                         StructEntry name l -> if name == struct
                                                                   then structFieldType l field
@@ -522,9 +571,9 @@ checkExpr st se = case se of
                                             else Left "Operator 'not' expects an operand of type bool."
                   SynArrow e1 e2 -> case checkExpr st $ ignorepos e1 of
                                       Left msg -> Left msg
-                                      Right l1 -> if (head $ words $ head l1) == "struct"
-                                                      then searchStructField (snd st) (last $ words $ head l1) $ getlabel $ ignorepos e2
-                                                      else Left "Operator '->' expects a struct as a left operand."
+                                      Right s1 -> case searchStructEntry (snd st) (head s1) of
+                                                    Left msg -> Left msg
+                                                    Right (StructEntry name _) -> searchStructField (snd st) name $ getlabel $ ignorepos e2
                   SynExp e1 e2 -> case checkExpr st $ ignorepos e1 of
                                     Left msg -> Left msg
                                     Right l1 -> if l1 == ["int"] || l1 == ["float"]
@@ -538,29 +587,40 @@ checkExpr st se = case se of
                                                   else Left "Operator '^' expects operands of type int or float."
                   SynTimes e1 e2 -> case checkExpr st $ ignorepos e1 of
                                       Left msg -> Left msg
-                                      Right l1 -> if l1 == ["int"] || l1 == ["float"]
-                                                    then case checkExpr st $ ignorepos e2 of
-                                                          Left msg -> Left msg
-                                                          Right l2 -> if l2 == ["int"] || l2 == ["float"]
-                                                                        then if l1 == l2
-                                                                                then Right l1
-                                                                                else Left "If the secon operand is of type int or float, operator '*' expects a first operand of same type."
-                                                                        else if (head $ words $ head l2) == "mat"
-                                                                                then if l1 == ["float"]
-                                                                                      then Right l2
-                                                                                      else Left "If the second operand is of type mat, operator '*' expects a first operand of type float or mat."
-                                                                                else Left "If the first operand is of type int or float, operator '*' expects a second operand of type int, float or mat."
-                                                    else if (head $ words $ head l1) == "mat"
+                                      Right l1 -> {-if l1 == ["int"] || l1 == ["float"]
                                                           then case checkExpr st $ ignorepos e2 of
                                                                 Left msg -> Left msg
-                                                                Right l2 -> if l2 == ["float"]
-                                                                              then Right l1
+                                                                Right l2 -> if l2 == ["int"] || l2 == ["float"]
+                                                                              then if l1 == l2
+                                                                                    then Right l1
+                                                                                    else Left "If the secon operand is of type int or float, operator '*' expects a first operand of same type."
                                                                               else if (head $ words $ head l2) == "mat"
+                                                                                    then if l1 == ["float"]
+                                                                                          then Right l2
+                                                                                          else Left "If the second operand is of type mat, operator '*' expects a first operand of type float or mat."
+                                                                                    else Left "If the first operand is of type int or float, operator '*' expects a second operand of type int, float or mat."
+                                                          else if (head $ words $ head l1) == "mat"
+                                                                then case checkExpr st $ ignorepos e2 of
+                                                                  Left msg -> Left msg
+                                                                  Right l2 -> if l2 == ["float"]
+                                                                                then Right l1
+                                                                                else if (head $ words $ head l2) == "mat"
                                                                                       then if (last $ words $ head l1) == (head $ tail $ words $ head l2)
                                                                                             then Right $ ("mat " ++ (head $ tail $ words $ head l1) ++ " " ++ (last $ words $ head l2)) : []
                                                                                             else Left "When multiplying matrices, number of columns of the first one must be equal to the number of lines of the second one."
                                                                                       else Left "If the first operando is of type mat, operator '*' expects a second operand of type float or mat."
-                                                          else Left "Operator '*' expects operands of type int, float or mat."
+                                                          else Left "Operator '*' expects operands of type int, float or mat."-}
+                                                    case checkExpr st $ ignorepos e1 of
+                                                      Left msg -> Left msg
+                                                      Right l1 -> if l1 /= ["bool"]
+                                                                    then case checkExpr st $ ignorepos e2 of
+                                                                          Left msg -> Left msg
+                                                                          Right l2 -> if l2 /= ["bool"]
+                                                                                        then if l1 == l2
+                                                                                              then Right l1
+                                                                                              else Left "Operator '*' expects operands of equal types."
+                                                                                        else Left "Operator '*' expects operands of type int, float or mat."
+                                                                    else Left "Operator '+' expects operands of type int, float or mat."
                   SynDiv e1 e2 -> case checkExpr st $ ignorepos e1 of
                                     Left msg -> Left msg
                                     Right l1 -> if l1 == ["int"] || l1 == ["float"]
@@ -840,6 +900,7 @@ findFuncRetTypes (h:t) s = case h of
                             Variable name _ _ _ -> if name == s
                                                        then Left "Function not defined." 
                                                        else findFuncRetTypes t s
+
 
 checkFuncParam :: SuperTable -> SynCall -> Either String ()
 checkFuncParam st call = do stEntry <- searchSTEntry (fst st) funcName
