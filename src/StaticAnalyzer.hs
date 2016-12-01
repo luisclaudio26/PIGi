@@ -412,8 +412,7 @@ assertMutable st (SynLArrow p f) = do pathMut <- assertMutable st (ignorepos p)
                                    where
                                      fieldName = getlabel . ignorepos $ f
 
-assertMutable st (SynLIndex p i) = fail $ "Cannot verify indexation yet!"
-
+assertMutable st (SynLIndex p i) = assertMutable st (ignorepos p)
 
 -----------------------
 searchStructEntry :: UserTypeTable -> String -> Either String UTEntry
@@ -452,7 +451,13 @@ fieldTypeInLValue st (SynLArrow p f) = do path <- fieldTypeInLValue st (ignorepo
                                           return $ getFieldType field
                                        where
                                           fieldName = getlabel . ignorepos $ f
-fieldTypeInLValue st (SynLIndex p i) = fail $ "Checking of indexation not implemented yet!"
+fieldTypeInLValue st (SynLIndex p i) = do checkExprList st (ignorepos `fmap` i)
+                                          return "float" -- TEMPORARY, because matrices are always float
+
+checkExprList :: SuperTable -> [SynExpr] -> Either String ()
+checkExprList st [] = return ()
+checkExprList st (h:t) = do checkExpr st h
+                            checkExprList st t
 
 buildExprTypeList :: SuperTable -> [SynExpr] -> Either String [String]
 buildExprTypeList st [] = Right []
