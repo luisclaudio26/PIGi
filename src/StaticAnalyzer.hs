@@ -107,9 +107,18 @@ stFromStruct st stct = if isElemUserTypeTable structName (snd st) || isElemSymbo
                         else Right (newSymbolTable, newTypeTable)
                        where
                         structName = getlabel $ ignorepos $ getStructName stct
-                        newTypeTable = newTTEntry : (snd st)
-                        newTTEntry = StructEntry (getlabel $ ignorepos $ getStructName stct) ([])
                         newSymbolTable = (makeStructConstructor stct) : (fst st)
+                        newTypeTable = newTTEntry : (snd st)
+                        newTTEntry = StructEntry (getlabel $ ignorepos $ getStructName stct) structFields
+                        structFields = buildFieldsList (getTuple stct)
+
+buildFieldsList :: [SynTypedIdent] -> [Field]
+buildFieldsList [] = []
+buildFieldsList (h:t) = entry : (buildFieldsList t)
+                        where
+                          nam = getlabel . ignorepos . getTypedIdentName $ h
+                          typ = getlabel . ignorepos . getTypeIdent . ignorepos . getTypedIdentType $ h
+                          entry = Field nam typ
 
 makeStructConstructor :: SynStruct -> STEntry
 makeStructConstructor stct = Function name args (name:[])
@@ -376,29 +385,55 @@ checkWhile st lvl sw = case exprOk of
                           blockOk = checkBlock st (lvl+1) (getWhileBlock sw)
 
 checkAttr :: SuperTable -> SynAttr -> Either String SynAttr
-checkAttr st sa@(SynAttr si se) = do assertMutable st (ignorepos `fmap` si)
-                                     s1 <- buildIdentTypeList st (ignorepos `fmap` si)
+checkAttr st sa@(SynAttr si se) = do assertListMutable st lvalues
+                                     s1 <- buildIdentTypeList st lvalues
                                      s2 <- buildExprTypeList st (ignorepos `fmap` se)
                                      if typeListsEqual s1 s2 == True
                                         then Right sa
                                         else Left "Variable and expression have different types in attribution."
+                                    where
+                                      lvalues = ignorepos `fmap` si
 
-assertMutable :: SuperTable -> [SynIdent] -> Either String ()
-assertMutable st [] = Right ()
-assertMutable st (h:t) = let lb = (getlabel h) in --(getlabel (ignorepos (getField h))) in
-                         do var <- searchSTEntry (fst st) lb
-                            if isMutable var
-                              then return ()
-                              else fail $ "Variable is not mutable: " ++ lb
+assertListMutable :: SuperTable -> [SynLValue] -> Either String ()
+assertListMutable st [] = return ()
+assertListMutable st (h:t) = do assertMutable st h
+                                assertListMutable st t
+                                return ()
 
-{- LEGACY:
-case buildIdentTypeList st (ignorepos `fmap` si) of
-  Left msg -> Left msg
-  Right s1 -> case buildExprTypeList st (ignorepos `fmap` se) of
-                Left msg -> Left msg
-                Right s2 -> if typeListsEqual s1 s2
-                              then Right sa
-                              else Left "Variable and expression have different types in attribution." -}
+assertMutable :: SuperTable -> SynLValue -> Either String ()
+assertMutable st (SynLIdent f) = do assertIdentMutable st (ignorepos f)
+
+-- Both field inside the struct and the struct itself
+-- must be mutable. For example, if we have a->b where
+-- 'b' is marked as mutable but 'a' is const, a->b will
+-- be const and therefore we won't let it appear in the
+-- left side of an attribution. 
+assertMutable st (SynLArrow p f) = do assertFieldMutable st (ignorepos f) (ignorepos p)
+                                      assertMutable st (ignorepos p)
+                                      return ()
+
+assertIdentMutable :: SuperTable -> SynIdent -> Either String ()
+assertIdentMutable st si = do var <- searchSTEntry (fst st) lb
+                              if isMutable var
+                                then return ()
+                                else fail $ "Variable or field is not mutable: " ++ lb
+                           where
+                              lb = getlabel si
+
+assertFieldMutable :: SuperTable -> SynIdent -> SynLValue -> Either String()
+assertFieldMutable st fld path = fail $ (show st)
+
+{- data SynLValue = SynLIdent { getField :: Located SynIdent }
+               | SynLArrow { getPath :: Located SynLValue
+                           , getField :: Located SynIdent
+                           }
+               | SynLIndex { getPath :: Located SynLValue
+                           , getIndex :: [Located SynExpr] }
+
+
+
+
+-}
                                                                 
 typeListsEqual :: [String] -> [String] -> Bool
 typeListsEqual [] [] = True
