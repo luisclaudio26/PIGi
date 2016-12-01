@@ -438,7 +438,9 @@ searchFieldInStruct (h:t) name = if getFieldName h == name
 typeListsEqual :: [String] -> [String] -> Bool
 typeListsEqual [] [] = True
 typeListsEqual (h1:t1) (h2:t2) = if h1 /= h2 && h1 /= "_"
-                                    then False
+                                    then if h1 == "mat" && (head $ words h2) == "mat"
+                                          then typeListsEqual t1 t2
+                                          else False
                                     else typeListsEqual t1 t2
 
 buildIdentTypeList :: SuperTable -> [SynLValue] -> Either String [String]
