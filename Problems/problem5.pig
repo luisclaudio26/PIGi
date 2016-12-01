@@ -16,6 +16,9 @@ def a : int;
 		else if m>n {
 			mdc ( n,(m mod n), r) ;
 		}
+		else {
+			mdc ((n mod m), m, r);
+		}
 	}
 }
 
