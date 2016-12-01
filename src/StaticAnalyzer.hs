@@ -483,11 +483,7 @@ searchSymbolTable :: [STEntry] -> String -> Either String String
 searchSymbolTable [] s = Left $ "Variable not defined: " ++ s
 searchSymbolTable (h:t) s = case h of 
                                 Variable name vtype _ _ -> if name == s
-                                                            then if vtype /= "int" && vtype /= "float" && vtype /= "bool" && vtype /= "vec" && 
-                                                                    vtype /= "vec2" && vtype /= "vec3" && vtype /= "vec4" && vtype /= "mat" && 
-                                                                    vtype /= "mat2" && vtype /= "mat3" && vtype /= "mat4" && vtype /= "string"
-                                                                    then Right $ "struct " ++ vtype
-                                                                    else Right vtype
+                                                            then Right vtype
                                                             else searchSymbolTable t s
                                 _ -> searchSymbolTable t s
 
@@ -570,9 +566,9 @@ checkExpr st se = case se of
                                             else Left "Operator 'not' expects an operand of type bool."
                   SynArrow e1 e2 -> case checkExpr st $ ignorepos e1 of
                                       Left msg -> Left msg
-                                      Right l1 -> if (head $ words $ head l1) == "struct"
-                                                      then searchStructField (snd st) (last $ words $ head l1) $ getlabel $ ignorepos e2
-                                                      else Left "Operator '->' expects a struct as a left operand."
+                                      Right s1 -> case searchStructEntry (snd st) (head s1) of
+                                                    Left msg -> Left msg
+                                                    Right (StructEntry name _) -> searchStructField (snd st) name $ getlabel $ ignorepos e2
                   SynExp e1 e2 -> case checkExpr st $ ignorepos e1 of
                                     Left msg -> Left msg
                                     Right l1 -> if l1 == ["int"] || l1 == ["float"]
