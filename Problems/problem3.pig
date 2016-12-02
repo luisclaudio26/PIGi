@@ -5,6 +5,21 @@
 
 module problem3;
 
+proc printMat(A: mat, r, c: int) {
+	def i, j: int;
+	i, j = 0, 0;
+	while i < r {
+        j = 0;
+		while j < c {
+			print(A[i,j]);
+			print(" | ");
+			j = j + 1;
+		}
+		i = i + 1;
+		println("");
+	}
+}
+
 proc main() {
 	println("PROBLEM 3:");
 	def m1, m2 : mat;
@@ -56,18 +71,18 @@ proc main() {
     if (cols1 == cols2 and rows1 == rows2) {
         def sum: mat;
         sum = m1 + m2;
-        println(sum);
+        printMat(sum, rows1, cols1);
 
     }
     else {
         println("invalid sum dimensions");
     }
-	
+	println("");
     #multiplicar matrizes
     if (cols1 == rows2) {
         def mult : mat;
         mult = m1 * m2;
-        println(mult);
+        printMat(mult, rows1, cols2);
     }
     else {
         println("invalid multiplication dimensions");
